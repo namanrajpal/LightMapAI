@@ -60,9 +60,10 @@ func add_surface() -> String:
 		"locked": false,
 		"grid_on": false,
 		"opacity": 1.0,
-		"content_type": "color",  # "color", "image", "video"
-		"content_source": "",     # file path for image/video
+		"content_type": "color",  # "color", "image", "video", "shader", "web"
+		"content_source": "",     # file path for image/video, effect id for shader, url for web
 		"fit_mode": "stretch",    # "stretch", "fit", "fill"
+		"shader_params": {},      # custom param overrides for shader effects
 		"description": "",        # user's creative intent for this surface
 		"tags": [],               # categorization tags
 		"corners": PackedVector2Array([
@@ -205,6 +206,7 @@ func save_config(path: String) -> Error:
 			"content_type": s.get("content_type", "color"),
 			"content_source": s.get("content_source", ""),
 			"fit_mode": s.get("fit_mode", "stretch"),
+			"shader_params": s.get("shader_params", {}),
 			"description": s.get("description", ""),
 			"tags": s.get("tags", []),
 			"corners": {
@@ -287,6 +289,7 @@ func load_config(path: String) -> Error:
 			"content_type": str(sd.get("content_type", "color")),
 			"content_source": str(sd.get("content_source", "")),
 			"fit_mode": str(sd.get("fit_mode", "stretch")),
+			"shader_params": sd.get("shader_params", {}),
 			"description": str(sd.get("description", "")),
 			"tags": sd.get("tags", []),
 			"corners": corners,

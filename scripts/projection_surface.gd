@@ -31,7 +31,7 @@ const SELECTION_BORDER_WIDTH: float = 2.5
 var _test_texture: Texture2D = null
 
 # Media content
-var _content_type: String = "color"  # "color", "image", "video"
+var _content_type: String = "color"  # "color", "image", "video", "shader"
 var _content_source: String = ""
 var _content_texture: Texture2D = null
 var _video_player: VideoStreamPlayer = null
@@ -40,6 +40,12 @@ var _video_sprite: Sprite2D = null
 var _opacity: float = 1.0
 var _fit_mode: String = "stretch"
 var _updating: bool = false  # Re-entrancy guard
+
+# Shader effect
+var _shader_material: ShaderMaterial = null
+var _shader_effect_id: String = ""
+var _shader_viewport: SubViewport = null
+var _shader_rect: ColorRect = null
 
 # CEF web browser
 var _cef_node: Node = null  # GDCEF instance
@@ -228,9 +234,14 @@ func load_content(content_type: String, source_path: String) -> void:
 			_browser_view.load_url(source_path)
 		return
 
+	# If same shader, skip reload
+	if content_type == "shader" and _content_type == "shader" and _shader_effect_id == source_path:
+		return
+
 	# Clean up previous content
 	_cleanup_video()
 	_cleanup_web()
+	_cleanup_shader()
 	_content_type = content_type
 	_content_source = source_path
 
@@ -241,6 +252,8 @@ func load_content(content_type: String, source_path: String) -> void:
 			_load_video(source_path)
 		"web":
 			_load_web(source_path)
+		"shader":
+			_load_shader(source_path)
 		_:
 			_content_texture = null
 			_update_polygon()
@@ -249,6 +262,7 @@ func load_content(content_type: String, source_path: String) -> void:
 func clear_content() -> void:
 	_cleanup_video()
 	_cleanup_web()
+	_cleanup_shader()
 	_content_type = "color"
 	_content_source = ""
 	_content_texture = null
@@ -377,10 +391,78 @@ func _cleanup_web() -> void:
 		_cef_node = null
 
 
+# ---------------------------------------------------------------------------
+# Shader effect content
+# ---------------------------------------------------------------------------
+func _load_shader(effect_id: String) -> void:
+	_shader_effect_id = effect_id
+	var effect = ShaderRegistry.get_effect(effect_id)
+	if effect == null:
+		push_error("ProjectionSurface: Shader effect not found: %s" % effect_id)
+		return
+
+	# Create a SubViewport with a ColorRect running the effect shader
+	_shader_viewport = SubViewport.new()
+	_shader_viewport.name = "ShaderViewport"
+	_shader_viewport.size = Vector2i(1024, 1024)
+	_shader_viewport.transparent_bg = false
+	_shader_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(_shader_viewport)
+
+	_shader_rect = ColorRect.new()
+	_shader_rect.name = "ShaderRect"
+	_shader_rect.anchors_preset = Control.PRESET_FULL_RECT
+	_shader_rect.size = Vector2(1024, 1024)
+
+	_shader_material = ShaderRegistry.create_material(effect_id)
+	if _shader_material:
+		_shader_material.set_shader_parameter("_resolution", Vector2(1024, 1024))
+		_shader_rect.material = _shader_material
+	_shader_viewport.add_child(_shader_rect)
+
+	# Apply any saved params from the surface data
+	var s := SurfaceManager.get_surface(surface_id)
+	if not s.is_empty():
+		var saved_params: Dictionary = s.get("shader_params", {})
+		for key in saved_params:
+			if _shader_material:
+				_shader_material.set_shader_parameter(key, saved_params[key])
+
+	set_process(true)
+
+
+func _cleanup_shader() -> void:
+	if _shader_rect:
+		_shader_rect.queue_free()
+		_shader_rect = null
+	if _shader_viewport:
+		_shader_viewport.queue_free()
+		_shader_viewport = null
+	_shader_material = null
+	_shader_effect_id = ""
+
+
+## Update a shader parameter at runtime (called from sidebar sliders).
+func set_shader_param(param_name: String, value: Variant) -> void:
+	if _shader_material:
+		_shader_material.set_shader_parameter(param_name, value)
+	# Persist to surface data
+	var s := SurfaceManager.get_surface(surface_id)
+	if not s.is_empty():
+		if not s.has("shader_params"):
+			s["shader_params"] = {}
+		s["shader_params"][param_name] = value
+
+
+## Get the current ShaderMaterial (for external param queries).
+func get_shader_material() -> ShaderMaterial:
+	return _shader_material
+
+
 func _exit_tree() -> void:
-	# Ensure CEF and video are cleaned up before this node is freed
 	_cleanup_web()
 	_cleanup_video()
+	_cleanup_shader()
 
 
 func _process(_delta: float) -> void:
@@ -392,6 +474,11 @@ func _process(_delta: float) -> void:
 	# Grab the CEF browser texture each frame
 	if _browser_texture_rect and _browser_texture_rect.texture:
 		_content_texture = _browser_texture_rect.texture
+		_update_polygon()
+
+	# Grab the shader viewport texture each frame
+	if _shader_viewport:
+		_content_texture = _shader_viewport.get_texture()
 		_update_polygon()
 
 

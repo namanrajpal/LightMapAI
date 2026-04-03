@@ -172,6 +172,13 @@ func _create_surface_card(id: String, s: Dictionary) -> void:
 	web_btn.pressed.connect(func(): _on_pick_web(id))
 	row3.add_child(web_btn)
 
+	var shader_btn := Button.new()
+	shader_btn.name = "ShaderBtn"
+	shader_btn.text = "✨"
+	shader_btn.tooltip_text = "Shader effect"
+	shader_btn.pressed.connect(func(): _on_pick_shader(id))
+	row3.add_child(shader_btn)
+
 	var fit_dropdown := OptionButton.new()
 	fit_dropdown.name = "FitDropdown"
 	fit_dropdown.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -213,6 +220,14 @@ func _create_surface_card(id: String, s: Dictionary) -> void:
 	content_label.add_theme_font_size_override("font_size", 10)
 	content_label.modulate = Color(0.7, 0.7, 0.7, 1.0)
 	details.add_child(content_label)
+
+	# Shader params container (populated dynamically when a shader is active)
+	var shader_params_box := VBoxContainer.new()
+	shader_params_box.name = "ShaderParams"
+	shader_params_box.visible = (s.get("content_type", "color") == "shader")
+	details.add_child(shader_params_box)
+	if s.get("content_type", "color") == "shader" and s.get("content_source", "") != "":
+		_build_shader_param_controls(id, shader_params_box, s.get("content_source", ""), s.get("shader_params", {}))
 
 	# Dimensions (computed, read-only)
 	var dims_label := Label.new()
@@ -272,6 +287,17 @@ func _update_card_content(card: PanelContainer, s: Dictionary) -> void:
 	var content_label: Label = vbox.get_node("Details/ContentLabel")
 	if content_label:
 		content_label.text = _content_label_text(s)
+
+	# Update shader params visibility and rebuild if needed
+	var shader_params_box: VBoxContainer = vbox.get_node("Details/ShaderParams")
+	if shader_params_box:
+		var is_shader: bool = (s.get("content_type", "color") == "shader")
+		shader_params_box.visible = is_shader
+		if is_shader and shader_params_box.get_child_count() == 0 and s.get("content_source", "") != "":
+			_build_shader_param_controls(s["id"], shader_params_box, s.get("content_source", ""), s.get("shader_params", {}))
+		elif not is_shader and shader_params_box.get_child_count() > 0:
+			for child in shader_params_box.get_children():
+				child.queue_free()
 
 	var dims_label: Label = vbox.get_node("Details/DimsLabel")
 	if dims_label:
@@ -366,6 +392,7 @@ func _on_clear_content(id: String) -> void:
 		return
 	s["content_type"] = "color"
 	s["content_source"] = ""
+	s["shader_params"] = {}
 	SurfaceManager.surface_updated.emit(id)
 
 
@@ -471,6 +498,11 @@ func _content_label_text(s: Dictionary) -> String:
 	var cs: String = s.get("content_source", "")
 	if ct == "color" or cs == "":
 		return "Content: Solid Color"
+	if ct == "shader":
+		var effect = ShaderRegistry.get_effect(cs)
+		if effect:
+			return "Content: %s %s" % [effect.emoji, effect.name]
+		return "Content: Shader (%s)" % cs
 	return "Content: %s" % cs.get_file()
 
 
@@ -524,5 +556,361 @@ func _on_generate_ai_scene(id: String) -> void:
 
 	dialog.canceled.connect(func(): dialog.queue_free())
 	dialog.confirmed.connect(func(): dialog.queue_free())
+	add_child(dialog)
+	dialog.popup_centered()
+
+
+# ---------------------------------------------------------------------------
+# Shader effect picker & parameter controls
+# ---------------------------------------------------------------------------
+
+func _on_pick_shader(id: String) -> void:
+	var dialog := AcceptDialog.new()
+	dialog.title = "Shader Effects"
+	dialog.size = Vector2i(420, 380)
+	dialog.ok_button_text = "Cancel"
+
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(400, 320)
+	dialog.add_child(scroll)
+
+	var vbox := VBoxContainer.new()
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(vbox)
+
+	var effect_ids: Array[String] = ShaderRegistry.get_effect_ids()
+
+	if effect_ids.is_empty():
+		var empty_label := Label.new()
+		empty_label.text = "No shader effects yet.\nAdd one below or place .gdshader files in shaders/effects/"
+		empty_label.modulate = Color(0.6, 0.6, 0.6, 1.0)
+		vbox.add_child(empty_label)
+	else:
+		for eid in effect_ids:
+			var effect = ShaderRegistry.get_effect(eid)
+			if effect == null:
+				continue
+
+			var row := HBoxContainer.new()
+			vbox.add_child(row)
+
+			var btn := Button.new()
+			btn.text = "%s  %s" % [effect.emoji, effect.name]
+			btn.tooltip_text = effect.description
+			btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			var captured_id: String = eid
+			btn.pressed.connect(func():
+				SurfaceManager.update_surface_property(id, "shader_params", {})
+				SurfaceManager.update_surface_property(id, "content_type", "shader")
+				SurfaceManager.update_surface_property(id, "content_source", captured_id)
+				_rebuild_shader_params_for_card(id, captured_id)
+				dialog.queue_free()
+			)
+			row.add_child(btn)
+
+			# Delete button for user shaders only
+			if ShaderRegistry.is_user_shader(eid):
+				var del_btn := Button.new()
+				del_btn.text = "🗑"
+				del_btn.tooltip_text = "Delete this shader"
+				del_btn.custom_minimum_size = Vector2(30, 0)
+				var del_eid: String = eid
+				del_btn.pressed.connect(func():
+					ShaderRegistry.delete_user_shader(del_eid)
+					dialog.queue_free()
+					# Reopen the picker
+					_on_pick_shader(id)
+				)
+				row.add_child(del_btn)
+
+			# Description subtitle
+			if effect.description != "":
+				var desc := Label.new()
+				desc.text = "    %s" % effect.description
+				desc.add_theme_font_size_override("font_size", 10)
+				desc.modulate = Color(0.6, 0.6, 0.6, 1.0)
+				vbox.add_child(desc)
+
+	# Separator + Add New button
+	vbox.add_child(HSeparator.new())
+
+	var add_btn := Button.new()
+	add_btn.text = "➕  Add New Shader Effect..."
+	add_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	add_btn.pressed.connect(func():
+		dialog.queue_free()
+		_show_add_shader_dialog(id)
+	)
+	vbox.add_child(add_btn)
+
+	dialog.canceled.connect(func(): dialog.queue_free())
+	dialog.confirmed.connect(func(): dialog.queue_free())
+	add_child(dialog)
+	dialog.popup_centered()
+
+
+func _rebuild_shader_params_for_card(surface_id: String, effect_id: String) -> void:
+	if not surface_cards.has(surface_id):
+		return
+	var card: PanelContainer = surface_cards[surface_id]
+	var shader_params_box: VBoxContainer = card.get_node("VBox/Details/ShaderParams")
+	if shader_params_box == null:
+		return
+	# Clear existing controls
+	for child in shader_params_box.get_children():
+		child.queue_free()
+	# Build new ones
+	var s := SurfaceManager.get_surface(surface_id)
+	var saved_params: Dictionary = s.get("shader_params", {}) if not s.is_empty() else {}
+	_build_shader_param_controls(surface_id, shader_params_box, effect_id, saved_params)
+	shader_params_box.visible = true
+
+
+func _build_shader_param_controls(surface_id: String, container: VBoxContainer, effect_id: String, saved_params: Dictionary) -> void:
+	var effect = ShaderRegistry.get_effect(effect_id)
+	if effect == null:
+		return
+
+	# Header
+	var header := Label.new()
+	header.text = "Shader Parameters"
+	header.add_theme_font_size_override("font_size", 11)
+	header.modulate = Color(0.8, 0.9, 1.0, 1.0)
+	container.add_child(header)
+
+	for param in effect.params:
+		match param.type:
+			"float":
+				_add_float_slider(surface_id, container, param, saved_params)
+			"int":
+				_add_float_slider(surface_id, container, param, saved_params)
+			"bool":
+				_add_bool_toggle(surface_id, container, param, saved_params)
+			"color":
+				_add_color_picker(surface_id, container, param, saved_params)
+
+
+func _add_float_slider(surface_id: String, container: VBoxContainer, param, saved_params: Dictionary) -> void:
+	var row := HBoxContainer.new()
+	container.add_child(row)
+
+	var label := Label.new()
+	label.text = param.display_name
+	label.custom_minimum_size = Vector2(80, 0)
+	label.add_theme_font_size_override("font_size", 10)
+	row.add_child(label)
+
+	var slider := HSlider.new()
+	slider.min_value = param.min_value
+	slider.max_value = param.max_value
+	slider.step = param.step
+	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	# Use saved value or default
+	var val = saved_params.get(param.name, param.default_value)
+	if val is float or val is int:
+		slider.value = float(val)
+	elif param.default_value != null:
+		slider.value = float(param.default_value)
+
+	var p_name: String = param.name
+	slider.value_changed.connect(func(v: float):
+		_on_shader_param_changed(surface_id, p_name, v)
+	)
+	row.add_child(slider)
+
+	var val_label := Label.new()
+	val_label.name = "Val_%s" % param.name
+	val_label.text = "%.2f" % slider.value
+	val_label.custom_minimum_size = Vector2(40, 0)
+	val_label.add_theme_font_size_override("font_size", 10)
+	slider.value_changed.connect(func(v: float): val_label.text = "%.2f" % v)
+	row.add_child(val_label)
+
+
+func _add_bool_toggle(surface_id: String, container: VBoxContainer, param, saved_params: Dictionary) -> void:
+	var row := HBoxContainer.new()
+	container.add_child(row)
+
+	var check := CheckButton.new()
+	check.text = param.display_name
+	check.add_theme_font_size_override("font_size", 10)
+
+	var val = saved_params.get(param.name, param.default_value)
+	check.button_pressed = bool(val) if val != null else false
+
+	var p_name: String = param.name
+	check.toggled.connect(func(pressed: bool):
+		_on_shader_param_changed(surface_id, p_name, pressed)
+	)
+	row.add_child(check)
+
+
+func _add_color_picker(surface_id: String, container: VBoxContainer, param, saved_params: Dictionary) -> void:
+	var row := HBoxContainer.new()
+	container.add_child(row)
+
+	var label := Label.new()
+	label.text = param.display_name
+	label.custom_minimum_size = Vector2(80, 0)
+	label.add_theme_font_size_override("font_size", 10)
+	row.add_child(label)
+
+	var picker := ColorPickerButton.new()
+	picker.custom_minimum_size = Vector2(32, 32)
+
+	var val = saved_params.get(param.name, param.default_value)
+	if val is Color:
+		picker.color = val
+	elif param.default_value is Color:
+		picker.color = param.default_value
+	else:
+		picker.color = Color.WHITE
+
+	var p_name: String = param.name
+	picker.color_changed.connect(func(col: Color):
+		_on_shader_param_changed(surface_id, p_name, col)
+	)
+	row.add_child(picker)
+
+
+func _on_shader_param_changed(surface_id: String, param_name: String, value: Variant) -> void:
+	# Update the surface data
+	var s := SurfaceManager.get_surface(surface_id)
+	if s.is_empty():
+		return
+	if not s.has("shader_params"):
+		s["shader_params"] = {}
+	s["shader_params"][param_name] = value
+
+	# Find the projection surface node and update the shader material directly
+	var canvas := get_tree().get_first_node_in_group("projection_canvas")
+	if canvas:
+		for child in canvas.get_children():
+			if child.has_method("set_shader_param") and child.surface_id == surface_id:
+				child.set_shader_param(param_name, value)
+				break
+
+
+# ---------------------------------------------------------------------------
+# Add Shader Effect dialog
+# ---------------------------------------------------------------------------
+
+func _show_add_shader_dialog(surface_id: String, p_name: String = "", p_emoji: String = "✨", p_desc: String = "", p_code: String = "", p_error: String = "") -> void:
+	var dialog := AcceptDialog.new()
+	dialog.title = "Add Shader Effect"
+	dialog.size = Vector2i(600, 550)
+	dialog.ok_button_text = "Save & Apply"
+
+	var main_vbox := VBoxContainer.new()
+	main_vbox.add_theme_constant_override("separation", 6)
+	dialog.add_child(main_vbox)
+
+	# Error at top (if any)
+	if p_error != "":
+		var err_label := Label.new()
+		err_label.text = "⚠ %s" % p_error
+		err_label.modulate = Color(1.0, 0.4, 0.4, 1.0)
+		err_label.add_theme_font_size_override("font_size", 11)
+		main_vbox.add_child(err_label)
+
+	# Name row
+	var name_row := HBoxContainer.new()
+	main_vbox.add_child(name_row)
+	var name_label := Label.new()
+	name_label.text = "Name:"
+	name_label.custom_minimum_size = Vector2(80, 0)
+	name_row.add_child(name_label)
+	var name_input := LineEdit.new()
+	name_input.placeholder_text = "My Cool Shader"
+	name_input.text = p_name
+	name_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_row.add_child(name_input)
+
+	# Emoji row
+	var emoji_row := HBoxContainer.new()
+	main_vbox.add_child(emoji_row)
+	var emoji_label := Label.new()
+	emoji_label.text = "Emoji:"
+	emoji_label.custom_minimum_size = Vector2(80, 0)
+	emoji_row.add_child(emoji_label)
+	var emoji_input := LineEdit.new()
+	emoji_input.text = p_emoji
+	emoji_input.custom_minimum_size = Vector2(50, 0)
+	emoji_row.add_child(emoji_input)
+	var emoji_hint := Label.new()
+	emoji_hint.text = "(icon shown in picker)"
+	emoji_hint.add_theme_font_size_override("font_size", 10)
+	emoji_hint.modulate = Color(0.6, 0.6, 0.6, 1.0)
+	emoji_row.add_child(emoji_hint)
+
+	# Description row
+	var desc_row := HBoxContainer.new()
+	main_vbox.add_child(desc_row)
+	var desc_label := Label.new()
+	desc_label.text = "Description:"
+	desc_label.custom_minimum_size = Vector2(80, 0)
+	desc_row.add_child(desc_label)
+	var desc_input := LineEdit.new()
+	desc_input.placeholder_text = "What does this shader do?"
+	desc_input.text = p_desc
+	desc_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	desc_row.add_child(desc_input)
+
+	# Shader code label + hint
+	var code_header := HBoxContainer.new()
+	main_vbox.add_child(code_header)
+	var code_label := Label.new()
+	code_label.text = "Shader Code:"
+	code_header.add_child(code_label)
+	var code_hint := Label.new()
+	code_hint.text = "  (paste from godotshaders.com — must include shader_type)"
+	code_hint.add_theme_font_size_override("font_size", 10)
+	code_hint.modulate = Color(0.6, 0.6, 0.6, 1.0)
+	code_header.add_child(code_hint)
+
+	# Shader code text area
+	var code_input := TextEdit.new()
+	code_input.text = p_code
+	code_input.placeholder_text = "shader_type canvas_item;\n\nvoid fragment() {\n    COLOR = vec4(UV, 0.5 + 0.5 * sin(TIME), 1.0);\n}"
+	code_input.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	code_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	code_input.custom_minimum_size = Vector2(0, 250)
+	code_input.wrap_mode = TextEdit.LINE_WRAPPING_NONE
+	code_input.scroll_fit_content_height = false
+	main_vbox.add_child(code_input)
+
+	dialog.confirmed.connect(func():
+		var shader_name: String = name_input.text.strip_edges()
+		var shader_emoji: String = emoji_input.text.strip_edges()
+		var shader_desc: String = desc_input.text.strip_edges()
+		var shader_code: String = code_input.text
+
+		# Validate — always close current dialog first, then reopen if needed
+		if shader_name.is_empty():
+			dialog.queue_free()
+			call_deferred("_show_add_shader_dialog", surface_id, shader_name, shader_emoji, shader_desc, shader_code, "Please enter a name.")
+			return
+
+		if not shader_code.contains("shader_type"):
+			dialog.queue_free()
+			call_deferred("_show_add_shader_dialog", surface_id, shader_name, shader_emoji, shader_desc, shader_code, "Shader code must contain 'shader_type' (e.g. shader_type canvas_item;)")
+			return
+
+		var effect_id: String = ShaderRegistry.add_user_shader(shader_name, shader_desc, shader_emoji, shader_code)
+		if effect_id.is_empty():
+			dialog.queue_free()
+			call_deferred("_show_add_shader_dialog", surface_id, shader_name, shader_emoji, shader_desc, shader_code, "Failed to save shader. Check the code.")
+			return
+
+		# Success — apply to surface
+		SurfaceManager.update_surface_property(surface_id, "shader_params", {})
+		SurfaceManager.update_surface_property(surface_id, "content_type", "shader")
+		SurfaceManager.update_surface_property(surface_id, "content_source", effect_id)
+		_rebuild_shader_params_for_card(surface_id, effect_id)
+		dialog.queue_free()
+	)
+	dialog.canceled.connect(func(): dialog.queue_free())
 	add_child(dialog)
 	dialog.popup_centered()
