@@ -1,0 +1,14 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/corner_handle.gd" id="1_script"]
+
+[node name="CornerHandle" type="Control"]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 3
+anchors_preset = 0
+offset_right = 20.0
+offset_bottom = 20.0
+focus_mode = 2
+mouse_filter = 0
+mouse_default_cursor_shape = 13
+script = ExtResource("1_script")

@@ -1,0 +1,26 @@
+[gd_scene load_steps=3 format=3 uid="uid://main_scene"]
+
+[ext_resource type="Texture2D" uid="uid://cvkdb3s2cpduq" path="res://icon.svg" id="1_icon"]
+[ext_resource type="Script" path="res://icon_movement.gd" id="2_script"]
+
+[node name="Main" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 1)
+
+[node name="Icon" type="Sprite2D" parent="."]
+position = Vector2(576, 324)
+texture = ExtResource("1_icon")
+script = ExtResource("2_script")
