@@ -139,7 +139,7 @@ func _create_surface_card(id: String, s: Dictionary) -> void:
 
 	# Selection is handled by the ▶ expand button and canvas clicks
 
-	# Row 3: Content — Image/Video picker + Clear
+	# Row 3: Content — Image/Video/Web/Shader picker + Clear
 	var row3 := HBoxContainer.new()
 	row3.name = "Row3"
 	details.add_child(row3)
@@ -158,13 +158,6 @@ func _create_surface_card(id: String, s: Dictionary) -> void:
 	vid_btn.pressed.connect(func(): _on_pick_video(id))
 	row3.add_child(vid_btn)
 
-	var clear_btn := Button.new()
-	clear_btn.name = "ClearBtn"
-	clear_btn.text = "✕"
-	clear_btn.tooltip_text = "Clear content"
-	clear_btn.pressed.connect(func(): _on_clear_content(id))
-	row3.add_child(clear_btn)
-
 	var web_btn := Button.new()
 	web_btn.name = "WebBtn"
 	web_btn.text = "🌐"
@@ -178,6 +171,13 @@ func _create_surface_card(id: String, s: Dictionary) -> void:
 	shader_btn.tooltip_text = "Shader effect"
 	shader_btn.pressed.connect(func(): _on_pick_shader(id))
 	row3.add_child(shader_btn)
+
+	var clear_btn := Button.new()
+	clear_btn.name = "ClearBtn"
+	clear_btn.text = "✕"
+	clear_btn.tooltip_text = "Clear content"
+	clear_btn.pressed.connect(func(): _on_clear_content(id))
+	row3.add_child(clear_btn)
 
 	var fit_dropdown := OptionButton.new()
 	fit_dropdown.name = "FitDropdown"

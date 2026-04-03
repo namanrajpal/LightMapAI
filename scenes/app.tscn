@@ -52,43 +52,15 @@ layout_mode = 2
 custom_minimum_size = Vector2(0, 40)
 script = ExtResource("3_toolbar")
 
-[node name="ToolbarAddBtn" type="Button" parent="UILayer/Toolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "+ Add Surface"
-
-[node name="Sep1" type="VSeparator" parent="UILayer/Toolbar"]
-layout_mode = 2
-
-[node name="PatternLabel" type="Label" parent="UILayer/Toolbar"]
-layout_mode = 2
-text = "Pattern:"
-
-[node name="PatternBtn" type="OptionButton" parent="UILayer/Toolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-custom_minimum_size = Vector2(130, 0)
-
-[node name="Sep2" type="VSeparator" parent="UILayer/Toolbar"]
-layout_mode = 2
-
-[node name="ToolbarGridBtn" type="CheckButton" parent="UILayer/Toolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Grid"
-
-[node name="Sep3" type="VSeparator" parent="UILayer/Toolbar"]
-layout_mode = 2
-
 [node name="SaveBtn" type="Button" parent="UILayer/Toolbar"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Save"
+text = "💾 Save"
 
 [node name="LoadBtn" type="Button" parent="UILayer/Toolbar"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Load"
+text = "📂 Load"
 
 [node name="Sep4" type="VSeparator" parent="UILayer/Toolbar"]
 layout_mode = 2
@@ -109,6 +81,12 @@ text = "✨ Generate"
 [node name="Spacer" type="Control" parent="UILayer/Toolbar"]
 layout_mode = 2
 size_flags_horizontal = 3
+
+[node name="SaveStatus" type="Label" parent="UILayer/Toolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = ""
+modulate = Color(0.5, 0.9, 0.5, 1)
 
 [node name="MiddleArea" type="HBoxContainer" parent="UILayer"]
 layout_mode = 2
