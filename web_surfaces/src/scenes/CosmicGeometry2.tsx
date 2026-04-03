@@ -1,0 +1,121 @@
+import * as THREE from 'three'
+import { useThreeScene } from './useThreeScene'
+
+export function CosmicGeometry2() {
+  let ico: THREE.Mesh
+  let icoMat: THREE.MeshBasicMaterial
+  let core: THREE.Mesh
+  let coreMat: THREE.MeshStandardMaterial
+  const rings: THREE.Mesh[] = []
+  let stars: THREE.Points
+  const orbiters: { mesh: THREE.Mesh; radius: number; speed: number; phase: number; tilt: number }[] = []
+  let camera: THREE.PerspectiveCamera
+
+  const containerRef = useThreeScene({
+    cameraPosition: [0, 0, 6],
+    background: 0x100508,
+    setup(scene, cam) {
+      camera = cam
+      scene.fog = new THREE.FogExp2(0x100508, 0.08)
+
+      // Central dodecahedron wireframe — warm tones
+      icoMat = new THREE.MeshBasicMaterial({ color: 0xff4466, wireframe: true, transparent: true, opacity: 0.6 })
+      ico = new THREE.Mesh(new THREE.DodecahedronGeometry(1.2, 1), icoMat)
+      scene.add(ico)
+
+      // Inner core — warm gold
+      coreMat = new THREE.MeshStandardMaterial({
+        color: 0xffaa22, emissive: 0xaa4400, emissiveIntensity: 0.5, roughness: 0.3, metalness: 0.8,
+      })
+      core = new THREE.Mesh(new THREE.OctahedronGeometry(0.5, 2), coreMat)
+      scene.add(core)
+
+      // Orbiting rings — warm/complementary palette
+      const ringColors = [0xff6633, 0xffcc11, 0xff2288, 0xee44ff]
+      for (let i = 0; i < 4; i++) {
+        const ring = new THREE.Mesh(
+          new THREE.TorusGeometry(1.8 + i * 0.4, 0.015, 8, 80),
+          new THREE.MeshBasicMaterial({ color: ringColors[i], transparent: true, opacity: 0.5 })
+        )
+        ring.rotation.x = Math.random() * Math.PI
+        ring.rotation.y = Math.random() * Math.PI
+        scene.add(ring)
+        rings.push(ring)
+      }
+
+      // Stars — warmer tint
+      const STAR_COUNT = 300
+      const starPositions = new Float32Array(STAR_COUNT * 3)
+      for (let i = 0; i < STAR_COUNT; i++) {
+        const theta = Math.random() * Math.PI * 2
+        const phi = Math.acos(2 * Math.random() - 1)
+        const r = 3 + Math.random() * 8
+        starPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta)
+        starPositions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta)
+        starPositions[i * 3 + 2] = r * Math.cos(phi)
+      }
+      const starGeo = new THREE.BufferGeometry()
+      starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3))
+      stars = new THREE.Points(starGeo, new THREE.PointsMaterial({
+        size: 0.04, color: 0xffddaa, transparent: true, opacity: 0.7,
+        blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
+      }))
+      scene.add(stars)
+
+      // Orbiting spheres — warm hues
+      for (let i = 0; i < 8; i++) {
+        const orb = new THREE.Mesh(
+          new THREE.SphereGeometry(0.06, 8, 8),
+          new THREE.MeshBasicMaterial({
+            color: new THREE.Color().setHSL((i / 8) * 0.15 + 0.0, 0.9, 0.6),
+            transparent: true, opacity: 0.9,
+          })
+        )
+        orbiters.push({ mesh: orb, radius: 2.0 + Math.random() * 1.5, speed: 0.3 + Math.random() * 0.7, phase: Math.random() * Math.PI * 2, tilt: Math.random() * Math.PI * 0.5 })
+        scene.add(orb)
+      }
+
+      // Lights — warm
+      const p1 = new THREE.PointLight(0xff6633, 2, 15)
+      p1.position.set(2, 2, 2)
+      scene.add(p1)
+      const p2 = new THREE.PointLight(0xffaa00, 1.5, 15)
+      p2.position.set(-2, -1, 3)
+      scene.add(p2)
+      scene.add(new THREE.AmbientLight(0x221111, 0.5))
+    },
+    animate(t) {
+      // Reverse rotation direction from cosmic1
+      ico.rotation.x = -t * 0.15
+      ico.rotation.y = -t * 0.25
+      core.rotation.x = t * 0.3
+      core.rotation.y = -t * 0.2
+      core.scale.setScalar(1.0 + Math.sin(t * 2) * 0.1)
+      coreMat.emissiveIntensity = 0.3 + Math.sin(t * 3) * 0.3
+
+      for (let i = 0; i < rings.length; i++) {
+        rings[i].rotation.x -= 0.003 * (i + 1)
+        rings[i].rotation.z -= 0.002 * (i + 1)
+        ;(rings[i].material as THREE.MeshBasicMaterial).opacity = 0.3 + Math.sin(t * 1.5 + i) * 0.2
+      }
+
+      for (const o of orbiters) {
+        const angle = -t * o.speed + o.phase
+        o.mesh.position.set(Math.cos(angle) * o.radius, Math.sin(angle * 0.7) * o.radius * Math.sin(o.tilt), Math.sin(angle) * o.radius)
+        o.mesh.scale.setScalar(0.8 + Math.sin(t * 3 + o.phase) * 0.3)
+      }
+
+      stars.rotation.y = -t * 0.02
+      stars.rotation.x = -t * 0.01
+      camera.position.x = Math.sin(t * 0.2 + Math.PI) * 0.5
+      camera.position.y = Math.cos(t * 0.15 + Math.PI) * 0.3
+      camera.lookAt(0, 0, 0)
+
+      // Warm hue cycle (reds/oranges/yellows)
+      const hue = ((t * 0.05) % 0.15) + 0.0
+      icoMat.color.setHSL(hue, 0.8, 0.5)
+    },
+  })
+
+  return <div ref={containerRef} style={{ width: '100vw', height: '100vh' }} />
+}

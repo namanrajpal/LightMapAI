@@ -13,6 +13,24 @@ func _ready() -> void:
 	SurfaceManager.surface_selected.connect(_on_surface_selected)
 
 
+func _input(event: InputEvent) -> void:
+	if SurfaceManager.is_output_mode:
+		return
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
+			# Ignore clicks on the left 250px (sidebar area) and top 40px (toolbar)
+			if mb.global_position.x < 260 or mb.global_position.y < 45:
+				return
+			# Check if click is inside any surface
+			for sid in surface_nodes:
+				var node: Control = surface_nodes[sid]
+				if node._point_in_quad(mb.global_position):
+					return  # Click is on a surface, let the surface handle it
+			# Click is on void — deselect everything
+			SurfaceManager.select_surface("")
+
+
 func _on_surface_added(id: String) -> void:
 	var node: Control = surface_scene.instantiate()
 	add_child(node)

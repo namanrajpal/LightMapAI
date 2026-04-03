@@ -50,7 +50,6 @@ mouse_filter = 2
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(0, 40)
-mouse_filter = 2
 script = ExtResource("3_toolbar")
 
 [node name="ToolbarAddBtn" type="Button" parent="UILayer/Toolbar"]
@@ -99,6 +98,14 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "▶ Output Mode"
 
+[node name="Sep5" type="VSeparator" parent="UILayer/Toolbar"]
+layout_mode = 2
+
+[node name="GenerateBtn" type="Button" parent="UILayer/Toolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "✨ Generate"
+
 [node name="Spacer" type="Control" parent="UILayer/Toolbar"]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -112,7 +119,6 @@ mouse_filter = 2
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(250, 0)
-mouse_filter = 2
 script = ExtResource("2_sidebar")
 
 [node name="SidebarVBox" type="VBoxContainer" parent="UILayer/MiddleArea/Sidebar"]
@@ -146,7 +152,6 @@ mouse_filter = 2
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(0, 30)
-mouse_filter = 2
 script = ExtResource("4_status_bar")
 
 [node name="InfoLabel" type="Label" parent="UILayer/StatusBar"]

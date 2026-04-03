@@ -1,0 +1,54 @@
+export interface SceneEntry {
+  id: string
+  name: string
+  path: string
+  description: string
+  emoji: string
+}
+
+const scenes: SceneEntry[] = [
+  {
+    id: 'candle',
+    name: 'Candle Flame',
+    path: '/candle',
+    description: 'Flickering candle with particle flame on black background',
+    emoji: '🕯️',
+  },
+  {
+    id: 'cosmic',
+    name: 'Cosmic Geometry',
+    path: '/cosmic',
+    description: 'Rotating wireframe icosahedron with orbiting spheres — cool blues',
+    emoji: '🌌',
+  },
+  {
+    id: 'cosmic2',
+    name: 'Cosmic Geometry II',
+    path: '/cosmic2',
+    description: 'Warm dodecahedron with golden orbiters — contrast companion',
+    emoji: '🔥',
+  },
+  {
+    id: 'black-flicker',
+    name: 'Black Flicker',
+    path: '/black-flicker',
+    description: 'Solid black with subtle dark ember flickering — portrait',
+    emoji: '⬛',
+  },
+  {
+    id: 'neon-red',
+    name: 'Neon Red Pulse',
+    path: '/neon-red',
+    description: 'Red gradient pulsing along borders with neon glow — landscape',
+    emoji: '🔴',
+  },
+  {
+    id: 'green-creative',
+    name: 'Green Creative',
+    path: '/green-creative',
+    description: 'Solid green with floating hex rings and drifting particles — portrait',
+    emoji: '🟢',
+  },
+]
+
+export default scenes

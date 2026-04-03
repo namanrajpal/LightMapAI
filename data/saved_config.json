@@ -1,0 +1,110 @@
+{
+	"app": {
+		"canvas_size": [
+			1920,
+			1080
+		]
+	},
+	"surfaces": [
+		{
+			"color": "#4488FF",
+			"content_source": "",
+			"content_type": "color",
+			"corners": {
+				"bl": [
+					1218.43798828125,
+					870.042114257812
+				],
+				"br": [
+					1246.96740722656,
+					847.321960449219
+				],
+				"tl": [
+					1222.666015625,
+					724.856201171875
+				],
+				"tr": [
+					1249.49011230469,
+					689.576354980469
+				]
+			},
+			"description": "",
+			"fit_mode": "stretch",
+			"grid_on": false,
+			"id": "19d51ca12d32399",
+			"label": "Surface 2",
+			"locked": false,
+			"opacity": 1.0,
+			"tags": [],
+			"visible": true,
+			"z_index": 1
+		},
+		{
+			"color": "#66311f",
+			"content_source": "",
+			"content_type": "color",
+			"corners": {
+				"bl": [
+					1248.39343261719,
+					860.580200195312
+				],
+				"br": [
+					1520.3125,
+					849.693725585938
+				],
+				"tl": [
+					1249.39343261719,
+					691.50390625
+				],
+				"tr": [
+					1523.45202636719,
+					691.918762207031
+				]
+			},
+			"description": "",
+			"fit_mode": "stretch",
+			"grid_on": false,
+			"id": "19d526901c49d7f",
+			"label": "Surface 2",
+			"locked": false,
+			"opacity": 1.0,
+			"tags": [],
+			"visible": true,
+			"z_index": 1
+		},
+		{
+			"color": "#76ff44",
+			"content_source": "",
+			"content_type": "color",
+			"corners": {
+				"bl": [
+					1311.0,
+					1080.0
+				],
+				"br": [
+					1409.0,
+					1080.0
+				],
+				"tl": [
+					1314.5,
+					885.5
+				],
+				"tr": [
+					1414.0,
+					894.0
+				]
+			},
+			"description": "",
+			"fit_mode": "stretch",
+			"grid_on": false,
+			"id": "19d528d402944e6",
+			"label": "Surface 3",
+			"locked": false,
+			"opacity": 1.0,
+			"tags": [],
+			"visible": true,
+			"z_index": 2
+		}
+	],
+	"version": 1
+}

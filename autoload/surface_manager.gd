@@ -59,6 +59,12 @@ func add_surface() -> String:
 		"visible": true,
 		"locked": false,
 		"grid_on": false,
+		"opacity": 1.0,
+		"content_type": "color",  # "color", "image", "video"
+		"content_source": "",     # file path for image/video
+		"fit_mode": "stretch",    # "stretch", "fit", "fill"
+		"description": "",        # user's creative intent for this surface
+		"tags": [],               # categorization tags
 		"corners": PackedVector2Array([
 			Vector2(cx - hw, cy - hh),  # TL
 			Vector2(cx + hw, cy - hh),  # TR
@@ -195,6 +201,12 @@ func save_config(path: String) -> Error:
 			"visible": s["visible"],
 			"locked": s["locked"],
 			"grid_on": s["grid_on"],
+			"opacity": s.get("opacity", 1.0),
+			"content_type": s.get("content_type", "color"),
+			"content_source": s.get("content_source", ""),
+			"fit_mode": s.get("fit_mode", "stretch"),
+			"description": s.get("description", ""),
+			"tags": s.get("tags", []),
 			"corners": {
 				"tl": [corners[0].x, corners[0].y],
 				"tr": [corners[1].x, corners[1].y],
@@ -218,7 +230,7 @@ func save_config(path: String) -> Error:
 	file.store_string(json_string)
 	file.close()
 	_current_save_path = path
-	print("SurfaceManager: Config saved to %s" % path)
+	print("SurfaceManager: Config saved to %s (%d surfaces)" % [path, surfaces.size()])
 	return OK
 
 
@@ -271,6 +283,12 @@ func load_config(path: String) -> Error:
 			"visible": bool(sd.get("visible", true)),
 			"locked": bool(sd.get("locked", false)),
 			"grid_on": bool(sd.get("grid_on", false)),
+			"opacity": float(sd.get("opacity", 1.0)),
+			"content_type": str(sd.get("content_type", "color")),
+			"content_source": str(sd.get("content_source", "")),
+			"fit_mode": str(sd.get("fit_mode", "stretch")),
+			"description": str(sd.get("description", "")),
+			"tags": sd.get("tags", []),
 			"corners": corners,
 		}
 		surfaces.append(surface)
@@ -297,7 +315,15 @@ func quick_load() -> Error:
 
 ## Try loading the default config shipped with the project.
 func load_default_config() -> Error:
-	return load_config("res://data/default_config.json")
+	# Prefer user config if it exists (from previous save)
+	var user_path := "user://configs/config.json"
+	if FileAccess.file_exists(user_path):
+		return load_config(user_path)
+	# Otherwise load the shipped default
+	var err := load_config("res://data/default_config.json")
+	# Don't keep the default config as the save path — it's read-only
+	_current_save_path = ""
+	return err
 
 
 # ---------------------------------------------------------------------------
@@ -309,6 +335,67 @@ func generate_id() -> String:
 	var t := int(Time.get_unix_time_from_system() * 1000)
 	var r := randi() % 0xFFFF
 	return "%x%04x" % [t, r]
+
+
+## Compute the approximate dimensions of a surface from its corners.
+func get_surface_dimensions(id: String) -> Dictionary:
+	var s := get_surface(id)
+	if s.is_empty():
+		return {"width": 0, "height": 0, "aspect": 1.0, "orientation": "square"}
+	var corners: PackedVector2Array = s["corners"]
+	if corners.size() < 4:
+		return {"width": 0, "height": 0, "aspect": 1.0, "orientation": "square"}
+	var w: float = ((corners[1] - corners[0]).length() + (corners[2] - corners[3]).length()) / 2.0
+	var h: float = ((corners[3] - corners[0]).length() + (corners[2] - corners[1]).length()) / 2.0
+	var aspect: float = w / maxf(h, 0.001)
+	var orientation := "square"
+	if aspect > 1.1:
+		orientation = "landscape"
+	elif aspect < 0.9:
+		orientation = "portrait"
+	return {"width": int(w), "height": int(h), "aspect": snapped(aspect, 0.01), "orientation": orientation}
+
+
+## Generate a prompt string for a surface (for AI content generation).
+func generate_surface_prompt(id: String) -> String:
+	var s := get_surface(id)
+	if s.is_empty():
+		return ""
+	var dims := get_surface_dimensions(id)
+	var lines: PackedStringArray = PackedStringArray()
+	lines.append("Create a Three.js scene for a projection mapping surface:")
+	lines.append("- Surface: %s" % s["label"])
+	lines.append("- Dimensions: %d×%d pixels (%s, %s:1 aspect ratio)" % [dims["width"], dims["height"], dims["orientation"], str(dims["aspect"])])
+	if s.get("description", "") != "":
+		lines.append("- Description: %s" % s["description"])
+	var tags: Array = s.get("tags", [])
+	if tags.size() > 0:
+		lines.append("- Tags: %s" % ", ".join(PackedStringArray(tags)))
+	lines.append("- Requirements: Black background (#000), full-screen effect filling the entire viewport, no UI elements")
+	lines.append("- The scene will be displayed inside a warped quad on a projection surface")
+	lines.append("- Output: React component using Three.js with the useThreeScene hook pattern")
+	return "\n".join(lines)
+
+
+## Generate a combined prompt for multiple surfaces.
+func generate_all_surfaces_prompt() -> String:
+	var lines: PackedStringArray = PackedStringArray()
+	lines.append("Generate Three.js scenes for a projection mapping setup with %d surfaces:\n" % surfaces.size())
+	for s in surfaces:
+		var dims := get_surface_dimensions(s["id"])
+		lines.append("## %s" % s["label"])
+		lines.append("- Dimensions: %d×%d pixels (%s)" % [dims["width"], dims["height"], dims["orientation"]])
+		if s.get("description", "") != "":
+			lines.append("- Description: %s" % s["description"])
+		var tags: Array = s.get("tags", [])
+		if tags.size() > 0:
+			lines.append("- Tags: %s" % ", ".join(PackedStringArray(tags)))
+		lines.append("")
+	lines.append("Requirements for all scenes:")
+	lines.append("- Black background (#000), full-screen effects, no UI")
+	lines.append("- Each scene runs at its own route in a React + Vite app")
+	lines.append("- Use Three.js with the useThreeScene hook pattern")
+	return "\n".join(lines)
 
 
 ## Get the current save path (for display in status bar, etc.)

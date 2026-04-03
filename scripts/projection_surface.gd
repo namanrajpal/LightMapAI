@@ -30,6 +30,22 @@ const SELECTION_BORDER_WIDTH: float = 2.5
 # Test pattern
 var _test_texture: Texture2D = null
 
+# Media content
+var _content_type: String = "color"  # "color", "image", "video"
+var _content_source: String = ""
+var _content_texture: Texture2D = null
+var _video_player: VideoStreamPlayer = null
+var _video_viewport: SubViewport = null
+var _video_sprite: Sprite2D = null
+var _opacity: float = 1.0
+var _fit_mode: String = "stretch"
+var _updating: bool = false  # Re-entrancy guard
+
+# CEF web browser
+var _cef_node: Node = null  # GDCEF instance
+var _browser_view: Node = null  # GdBrowserView instance
+var _browser_texture_rect: TextureRect = null
+
 # Whole-surface drag state
 var _is_dragging: bool = false
 var _drag_start_mouse: Vector2 = Vector2.ZERO
@@ -58,9 +74,18 @@ func initialize(id: String) -> void:
 	visible = s["visible"]
 	surface_color = Color.html(s["color"])
 	show_grid = s["grid_on"]
+	_opacity = s.get("opacity", 1.0)
+	_fit_mode = s.get("fit_mode", "stretch")
 
 	_update_polygon()
 	_position_handles()
+	_apply_opacity(_opacity)
+
+	# Load content if specified
+	var ct: String = s.get("content_type", "color")
+	var cs: String = s.get("content_source", "")
+	if ct != "color" and cs != "":
+		load_content(ct, cs)
 
 
 # ---------------------------------------------------------------------------
@@ -94,14 +119,21 @@ func _update_polygon() -> void:
 	warp_polygon.polygon = corners
 	warp_polygon.color = surface_color
 
-	# Set UVs for texture mapping (unit square)
-	if _test_texture:
-		warp_polygon.texture = _test_texture
-		warp_polygon.uv = PackedVector2Array([
-			Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)
-		])
+	# Determine which texture to use: content > test pattern > none
+	var active_texture: Texture2D = null
+	if _content_texture:
+		active_texture = _content_texture
+	elif _test_texture:
+		active_texture = _test_texture
+
+	if active_texture:
+		warp_polygon.texture = active_texture
+		warp_polygon.uv = _compute_fit_uvs(active_texture)
+		# When showing a texture, use white color so texture isn't tinted
+		warp_polygon.color = Color.WHITE
 	else:
 		warp_polygon.texture = null
+		warp_polygon.color = surface_color
 
 	# Trigger redraw for grid/selection overlays
 	queue_redraw()
@@ -186,6 +218,268 @@ func set_test_pattern(texture: Texture2D) -> void:
 
 
 # ---------------------------------------------------------------------------
+# Media content loading
+# ---------------------------------------------------------------------------
+func load_content(content_type: String, source_path: String) -> void:
+	# If already showing web and just changing URL, navigate instead of recreating
+	if content_type == "web" and _content_type == "web" and _browser_view != null:
+		_content_source = source_path
+		if _browser_view.has_method("load_url"):
+			_browser_view.load_url(source_path)
+		return
+
+	# Clean up previous content
+	_cleanup_video()
+	_cleanup_web()
+	_content_type = content_type
+	_content_source = source_path
+
+	match content_type:
+		"image":
+			_load_image(source_path)
+		"video":
+			_load_video(source_path)
+		"web":
+			_load_web(source_path)
+		_:
+			_content_texture = null
+			_update_polygon()
+
+
+func clear_content() -> void:
+	_cleanup_video()
+	_cleanup_web()
+	_content_type = "color"
+	_content_source = ""
+	_content_texture = null
+	_test_texture = null
+	_update_polygon()
+
+
+func _load_image(path: String) -> void:
+	var img := Image.new()
+	var err: Error
+	if path.begins_with("res://") or path.begins_with("user://"):
+		# Godot resource path
+		var tex := load(path) as Texture2D
+		if tex:
+			_content_texture = tex
+			_update_polygon()
+			return
+	# Absolute file path — load from disk
+	err = img.load(path)
+	if err != OK:
+		push_error("ProjectionSurface: Failed to load image: %s (error %d)" % [path, err])
+		return
+	_content_texture = ImageTexture.create_from_image(img)
+	_update_polygon()
+
+
+func _load_video(path: String) -> void:
+	# Create a SubViewport to render the video into
+	_video_viewport = SubViewport.new()
+	_video_viewport.name = "VideoViewport"
+	_video_viewport.size = Vector2i(1024, 1024)
+	_video_viewport.transparent_bg = false
+	_video_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(_video_viewport)
+
+	_video_player = VideoStreamPlayer.new()
+	_video_player.name = "VideoPlayer"
+	_video_player.autoplay = true
+	_video_player.loop = true
+	_video_player.volume_db = -80.0  # Muted
+	_video_player.expand = true
+
+	# Load the video stream
+	if path.begins_with("res://") or path.begins_with("user://"):
+		_video_player.stream = load(path)
+	else:
+		# For absolute paths, try loading as a resource
+		var stream := VideoStreamTheora.new()
+		stream.file = path
+		_video_player.stream = stream
+
+	_video_viewport.add_child(_video_player)
+	_video_player.play()
+
+	# The video texture will be grabbed each frame in _process
+	set_process(true)
+
+
+func _cleanup_video() -> void:
+	if _video_player:
+		_video_player.stop()
+		_video_player.queue_free()
+		_video_player = null
+	if _video_viewport:
+		_video_viewport.queue_free()
+		_video_viewport = null
+	_video_sprite = null
+	set_process(false)
+
+
+func _load_web(url: String) -> void:
+	# Create a GDCEF node if the class exists
+	if not ClassDB.class_exists("GdCEF"):
+		push_error("ProjectionSurface: GdCEF class not found — is the gdcef extension loaded?")
+		return
+
+	_cef_node = ClassDB.instantiate("GdCEF")
+	_cef_node.name = "CEF_%s" % surface_id
+	add_child(_cef_node)
+
+	# Initialize CEF
+	var settings := {
+		"locale": "en-US",
+		"enable_media_stream": false,
+		"remote_debugging_port": 0,
+	}
+	if not _cef_node.initialize(settings):
+		push_error("ProjectionSurface: Failed to initialize GDCEF")
+		_cleanup_web()
+		return
+
+	# Create a TextureRect to receive the browser output
+	_browser_texture_rect = TextureRect.new()
+	_browser_texture_rect.name = "BrowserTarget"
+	_browser_texture_rect.visible = false  # Hidden — we just grab its texture
+	_browser_texture_rect.custom_minimum_size = Vector2(1024, 768)
+	_browser_texture_rect.size = Vector2(1024, 768)
+	add_child(_browser_texture_rect)
+
+	# Create the browser
+	var browser_settings := {"javascript": true, "javascript_close_windows": false}
+	_browser_view = _cef_node.create_browser(url, _browser_texture_rect, browser_settings)
+
+	if _browser_view == null:
+		push_error("ProjectionSurface: Failed to create CEF browser for URL: %s" % url)
+		_cleanup_web()
+		return
+
+	# Start grabbing the browser texture each frame
+	set_process(true)
+
+
+func _cleanup_web() -> void:
+	if _browser_view:
+		# Close the browser before freeing nodes
+		if _browser_view.has_method("close"):
+			_browser_view.close()
+		_browser_view = null
+	if _browser_texture_rect:
+		_browser_texture_rect.queue_free()
+		_browser_texture_rect = null
+	if _cef_node:
+		if _cef_node.has_method("shutdown"):
+			_cef_node.shutdown()
+		_cef_node.queue_free()
+		_cef_node = null
+
+
+func _exit_tree() -> void:
+	# Ensure CEF and video are cleaned up before this node is freed
+	_cleanup_web()
+	_cleanup_video()
+
+
+func _process(_delta: float) -> void:
+	# Grab the video viewport texture each frame
+	if _video_viewport and _video_player and _video_player.is_playing():
+		_content_texture = _video_viewport.get_texture()
+		_update_polygon()
+
+	# Grab the CEF browser texture each frame
+	if _browser_texture_rect and _browser_texture_rect.texture:
+		_content_texture = _browser_texture_rect.texture
+		_update_polygon()
+
+
+# ---------------------------------------------------------------------------
+# Opacity
+# ---------------------------------------------------------------------------
+func _apply_opacity(opacity: float) -> void:
+	_opacity = clampf(opacity, 0.0, 1.0)
+	self_modulate.a = _opacity
+
+
+func set_opacity(opacity: float) -> void:
+	_apply_opacity(opacity)
+	SurfaceManager.update_surface_property(surface_id, "opacity", _opacity)
+
+
+# ---------------------------------------------------------------------------
+# Fit modes
+# ---------------------------------------------------------------------------
+func _compute_fit_uvs(texture: Texture2D) -> PackedVector2Array:
+	## Compute UV coordinates based on fit mode and texture aspect ratio.
+	## Returns 4 UVs for TL, TR, BR, BL in PIXEL coordinates (Polygon2D requirement).
+	if not texture:
+		return PackedVector2Array([
+			Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)
+		])
+
+	var tex_size := texture.get_size()
+	if tex_size.x <= 0 or tex_size.y <= 0:
+		return PackedVector2Array([
+			Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)
+		])
+
+	var w: float = tex_size.x
+	var h: float = tex_size.y
+	var tex_aspect: float = w / h
+
+	# Compute the quad's approximate aspect ratio
+	var quad_width: float = (corners[1] - corners[0]).length()
+	var quad_height: float = (corners[3] - corners[0]).length()
+	if quad_width <= 0 or quad_height <= 0:
+		return PackedVector2Array([
+			Vector2(0, 0), Vector2(w, 0), Vector2(w, h), Vector2(0, h)
+		])
+
+	var quad_aspect: float = quad_width / quad_height
+
+	match _fit_mode:
+		"stretch":
+			# Full texture mapped to full quad
+			return PackedVector2Array([
+				Vector2(0, 0), Vector2(w, 0), Vector2(w, h), Vector2(0, h)
+			])
+		"fit":
+			# Show full texture, same as stretch for Polygon2D
+			# (true letterboxing would need a SubViewport)
+			return PackedVector2Array([
+				Vector2(0, 0), Vector2(w, 0), Vector2(w, h), Vector2(0, h)
+			])
+		"fill":
+			# Crop: scale content to cover quad, crop overflow
+			if tex_aspect > quad_aspect:
+				# Content wider — crop sides
+				var visible_w: float = h * quad_aspect
+				var offset_x: float = (w - visible_w) / 2.0
+				return PackedVector2Array([
+					Vector2(offset_x, 0),
+					Vector2(offset_x + visible_w, 0),
+					Vector2(offset_x + visible_w, h),
+					Vector2(offset_x, h)
+				])
+			else:
+				# Content taller — crop top/bottom
+				var visible_h: float = w / quad_aspect
+				var offset_y: float = (h - visible_h) / 2.0
+				return PackedVector2Array([
+					Vector2(0, offset_y),
+					Vector2(w, offset_y),
+					Vector2(w, offset_y + visible_h),
+					Vector2(0, offset_y + visible_h)
+				])
+
+	return PackedVector2Array([
+		Vector2(0, 0), Vector2(w, 0), Vector2(w, h), Vector2(0, h)
+	])
+
+
+# ---------------------------------------------------------------------------
 # Signal handlers
 # ---------------------------------------------------------------------------
 func _on_corner_moved(corner_index: int, new_position: Vector2) -> void:
@@ -201,10 +495,12 @@ func _on_surface_selected(id: String) -> void:
 
 
 func _on_surface_updated(id: String) -> void:
-	if id != surface_id:
+	if id != surface_id or _updating:
 		return
+	_updating = true
 	var s := SurfaceManager.get_surface(id)
 	if s.is_empty():
+		_updating = false
 		return
 
 	_apply_color(Color.html(s["color"]))
@@ -212,11 +508,33 @@ func _on_surface_updated(id: String) -> void:
 	z_index = s["z_index"]
 	visible = s["visible"]
 
+	# Opacity
+	var new_opacity: float = s.get("opacity", 1.0)
+	if new_opacity != _opacity:
+		_apply_opacity(new_opacity)
+
+	# Fit mode
+	var new_fit: String = s.get("fit_mode", "stretch")
+	if new_fit != _fit_mode:
+		_fit_mode = new_fit
+		_update_polygon()
+
+	# Content
+	var new_ct: String = s.get("content_type", "color")
+	var new_cs: String = s.get("content_source", "")
+	if new_ct != _content_type or new_cs != _content_source:
+		if new_ct == "color" or new_cs == "":
+			clear_content()
+		else:
+			load_content(new_ct, new_cs)
+
 	var new_corners: PackedVector2Array = s["corners"]
 	if new_corners != corners:
 		corners = new_corners.duplicate()
 		_update_polygon()
 		_position_handles()
+
+	_updating = false
 
 
 func _on_mode_changed(is_output: bool) -> void:
@@ -236,6 +554,7 @@ func _input(event: InputEvent) -> void:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			if mb.pressed:
+				# Only start drag if click is inside our quad and not on a handle
 				if _point_in_quad(mb.global_position) and not _click_on_handle(mb.global_position):
 					# Deselect any focused corner handle
 					for h in corner_handles:
@@ -250,8 +569,8 @@ func _input(event: InputEvent) -> void:
 						_drag_start_mouse = mb.global_position
 						_drag_start_corners = corners.duplicate()
 			else:
-				# Release — stop dragging
-				_is_dragging = false
+				if _is_dragging:
+					_is_dragging = false
 
 	elif event is InputEventMouseMotion and _is_dragging:
 		var mm := event as InputEventMouseMotion
