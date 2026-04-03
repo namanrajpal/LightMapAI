@@ -30,6 +30,11 @@ const SELECTION_BORDER_WIDTH: float = 2.5
 # Test pattern
 var _test_texture: Texture2D = null
 
+# Whole-surface drag state
+var _is_dragging: bool = false
+var _drag_start_mouse: Vector2 = Vector2.ZERO
+var _drag_start_corners: PackedVector2Array = PackedVector2Array()
+
 # ---------------------------------------------------------------------------
 # Lifecycle
 # ---------------------------------------------------------------------------
@@ -221,17 +226,49 @@ func _on_mode_changed(is_output: bool) -> void:
 
 
 # ---------------------------------------------------------------------------
-# Click detection (for selecting surfaces by clicking on them)
+# Click detection + whole-surface dragging
 # ---------------------------------------------------------------------------
 func _input(event: InputEvent) -> void:
 	if SurfaceManager.is_output_mode:
 		return
+
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
-		if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
-			if _point_in_quad(mb.global_position):
-				if not _any_handle_has_focus():
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			if mb.pressed:
+				if _point_in_quad(mb.global_position) and not _click_on_handle(mb.global_position):
+					# Deselect any focused corner handle
+					for h in corner_handles:
+						if h.has_focus():
+							h.deselect()
+							h.release_focus()
 					SurfaceManager.select_surface(surface_id)
+					# Start drag if not locked
+					var s := SurfaceManager.get_surface(surface_id)
+					if not s.is_empty() and not s["locked"]:
+						_is_dragging = true
+						_drag_start_mouse = mb.global_position
+						_drag_start_corners = corners.duplicate()
+			else:
+				# Release — stop dragging
+				_is_dragging = false
+
+	elif event is InputEventMouseMotion and _is_dragging:
+		var mm := event as InputEventMouseMotion
+		var delta := mm.global_position - _drag_start_mouse
+
+		# Compute new corners, clamping so no corner leaves the canvas
+		var new_corners := PackedVector2Array()
+		for i in range(4):
+			var c := _drag_start_corners[i] + delta
+			c.x = clampf(c.x, 0.0, 1920.0)
+			c.y = clampf(c.y, 0.0, 1080.0)
+			new_corners.append(c)
+
+		corners = new_corners
+		_update_polygon()
+		_position_handles()
+		SurfaceManager.update_corners(surface_id, corners)
 
 
 func _point_in_quad(point: Vector2) -> bool:
@@ -250,5 +287,12 @@ func _point_in_quad(point: Vector2) -> bool:
 func _any_handle_has_focus() -> bool:
 	for h in corner_handles:
 		if h.has_focus():
+			return true
+	return false
+
+
+func _click_on_handle(point: Vector2) -> bool:
+	for h in corner_handles:
+		if h.visible and h.get_global_rect().has_point(point):
 			return true
 	return false
