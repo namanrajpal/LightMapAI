@@ -1,4 +1,8 @@
 <p align="center">
+  <video src="https://github.com/namanrajpal/LightMapAI/raw/main/docs/AWE_demo.mp4" width="100%" autoplay loop muted playsinline></video>
+</p>
+
+<p align="center">
   <img src="docs/image/poster-hero.png" alt="LightMapAI Hero" width="100%">
 </p>
 
