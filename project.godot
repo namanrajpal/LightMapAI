@@ -19,7 +19,6 @@ config/icon="res://icon.svg"
 
 SurfaceManager="*res://autoload/surface_manager.gd"
 ShaderRegistry="*res://autoload/shader_registry.gd"
-TimelineManager="*res://autoload/timeline_manager.gd"
 
 [display]
 

@@ -231,8 +231,6 @@ func save_config(path: String) -> Error:
 			},
 		})
 
-	data["animations"] = TimelineManager.serialize_animations()
-
 	var json_string := JSON.stringify(data, "\t")
 
 	# Ensure directory exists
@@ -326,9 +324,6 @@ func load_config(path: String) -> Error:
 		else:
 			preferred_display_index = 0
 	
-	# Load animation data if present
-	TimelineManager.deserialize_animations(data.get("animations", {}))
-
 	print("SurfaceManager: Config loaded from %s (%d surfaces)" % [path, surfaces.size()])
 	return OK
 
