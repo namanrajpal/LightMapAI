@@ -1,13 +1,18 @@
 extends HBoxContainer
-## Toolbar — Top bar with Save, Load, Output Mode, Generate.
+## Toolbar — Top bar with Save, Load, Output Mode, Dual Output, Generate.
+
+signal dual_output_requested()
 
 @onready var save_btn: Button = %SaveBtn
 @onready var load_btn: Button = %LoadBtn
 @onready var output_btn: Button = %OutputBtn
+@onready var dual_output_btn: Button = %DualOutputBtn
+@onready var display_selector: OptionButton = %DisplaySelector
 @onready var generate_btn: Button = %GenerateBtn
 @onready var save_status: Label = %SaveStatus
 
 var _save_fade_tween: Tween = null
+var _is_dual_output_active: bool = false
 
 
 func _ready() -> void:
@@ -17,6 +22,11 @@ func _ready() -> void:
 		load_btn.pressed.connect(_on_load_pressed)
 	if output_btn:
 		output_btn.pressed.connect(_on_output_pressed)
+	if dual_output_btn:
+		dual_output_btn.pressed.connect(_on_dual_output_pressed)
+	if display_selector:
+		_populate_display_selector()
+		display_selector.item_selected.connect(_on_display_selected)
 	if generate_btn:
 		generate_btn.pressed.connect(_on_generate_pressed)
 
@@ -64,6 +74,42 @@ func _show_save_status(text: String, color: Color) -> void:
 
 func _on_output_pressed() -> void:
 	SurfaceManager.set_output_mode(true)
+
+
+func _on_dual_output_pressed() -> void:
+	dual_output_requested.emit()
+
+
+func _populate_display_selector() -> void:
+	display_selector.clear()
+	var count := DisplayServer.get_screen_count()
+	for i in range(count):
+		var size := DisplayServer.screen_get_size(i)
+		display_selector.add_item("Display %d (%dx%d)" % [i, size.x, size.y], i)
+	if count > 1:
+		display_selector.selected = 1
+
+
+func set_dual_output_active(active: bool) -> void:
+	_is_dual_output_active = active
+	dual_output_btn.text = "■ Stop Output" if active else "▶ Dual Output"
+	display_selector.disabled = active
+
+
+func get_selected_display() -> int:
+	return display_selector.get_selected_id()
+
+
+func set_selected_display(index: int) -> void:
+	for i in range(display_selector.item_count):
+		if display_selector.get_item_id(i) == index:
+			display_selector.selected = i
+			return
+
+
+func _on_display_selected(index: int) -> void:
+	var display_id := display_selector.get_item_id(index)
+	SurfaceManager.set_preferred_display(display_id)
 
 
 func _on_generate_pressed() -> void:

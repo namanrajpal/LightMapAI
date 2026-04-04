@@ -27,6 +27,7 @@ const SURFACE_COLORS: Array[String] = [
 
 var _next_color_index: int = 0
 var _current_save_path: String = ""
+var preferred_display_index: int = 1
 
 # ---------------------------------------------------------------------------
 # Lifecycle
@@ -180,6 +181,18 @@ func toggle_output_mode() -> void:
 
 
 # ---------------------------------------------------------------------------
+# Display Preference
+# ---------------------------------------------------------------------------
+
+func set_preferred_display(index: int) -> void:
+	preferred_display_index = index
+
+
+func get_preferred_display() -> int:
+	return preferred_display_index
+
+
+# ---------------------------------------------------------------------------
 # Serialization — Save / Load
 # ---------------------------------------------------------------------------
 
@@ -188,6 +201,7 @@ func save_config(path: String) -> Error:
 		"version": 1,
 		"app": {
 			"canvas_size": [1920, 1080],
+			"preferred_display_index": preferred_display_index,
 		},
 		"surfaces": [],
 	}
@@ -298,6 +312,18 @@ func load_config(path: String) -> Error:
 		surface_added.emit(surface["id"])
 
 	_current_save_path = path
+	
+	# Restore display preference
+	if data.has("app") and data["app"].has("preferred_display_index"):
+		var saved_idx: int = int(data["app"]["preferred_display_index"])
+		var screen_count := DisplayServer.get_screen_count()
+		if saved_idx < screen_count:
+			preferred_display_index = saved_idx
+		elif screen_count > 1:
+			preferred_display_index = 1
+		else:
+			preferred_display_index = 0
+	
 	print("SurfaceManager: Config loaded from %s (%d surfaces)" % [path, surfaces.size()])
 	return OK
 

@@ -4,6 +4,7 @@ extends Control
 ## Uses direct Polygon2D vertex positioning for reliable rendering.
 
 var surface_id: String = ""
+var output_only: bool = false
 var corners: PackedVector2Array = PackedVector2Array()
 var surface_color: Color = Color(0.267, 0.533, 1.0, 1.0)
 var show_grid: bool = false
@@ -62,14 +63,17 @@ var _drag_start_corners: PackedVector2Array = PackedVector2Array()
 # ---------------------------------------------------------------------------
 func _ready() -> void:
 	_create_warp_polygon()
-	_create_corner_handles()
+	if not output_only:
+		_create_corner_handles()
 
 	SurfaceManager.surface_selected.connect(_on_surface_selected)
 	SurfaceManager.surface_updated.connect(_on_surface_updated)
-	SurfaceManager.mode_changed.connect(_on_mode_changed)
+	if not output_only:
+		SurfaceManager.mode_changed.connect(_on_mode_changed)
 
 
-func initialize(id: String) -> void:
+func initialize(id: String, p_output_only: bool = false) -> void:
+	output_only = p_output_only
 	surface_id = id
 	var s := SurfaceManager.get_surface(id)
 	if s.is_empty():
@@ -158,6 +162,9 @@ func _draw() -> void:
 	if corners.size() < 4:
 		return
 
+	if output_only:
+		return
+
 	# Draw selection border
 	if _is_selected and not SurfaceManager.is_output_mode:
 		for i in range(4):
@@ -213,8 +220,9 @@ func _update_grid_visibility(grid_on: bool) -> void:
 
 func set_selected(selected: bool) -> void:
 	_is_selected = selected
-	for h in corner_handles:
-		h.visible = selected and not SurfaceManager.is_output_mode
+	if not output_only:
+		for h in corner_handles:
+			h.visible = selected and not SurfaceManager.is_output_mode
 	queue_redraw()
 
 
@@ -634,6 +642,8 @@ func _on_mode_changed(is_output: bool) -> void:
 # Click detection + whole-surface dragging
 # ---------------------------------------------------------------------------
 func _input(event: InputEvent) -> void:
+	if output_only:
+		return
 	if SurfaceManager.is_output_mode:
 		return
 

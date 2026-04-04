@@ -9,12 +9,17 @@ extends Control
 @onready var ui_layer: VBoxContainer = %UILayer
 @onready var projection_canvas: Control = %ProjectionCanvas
 @onready var canvas_bg: ColorRect = %CanvasBG
+@onready var toolbar: HBoxContainer = %Toolbar
 
 var _pre_output_window_mode: DisplayServer.WindowMode
+var _output_window: Window = null
 
 func _ready() -> void:
 	# Try loading default config on first launch
 	SurfaceManager.load_default_config()
+
+	# Restore display preference to toolbar
+	toolbar.set_selected_display(SurfaceManager.preferred_display_index)
 
 	# If no surfaces loaded, add one
 	if SurfaceManager.surfaces.is_empty():
@@ -22,6 +27,9 @@ func _ready() -> void:
 
 	# Connect mode signal
 	SurfaceManager.mode_changed.connect(_on_mode_changed)
+
+	# Connect toolbar dual output action
+	toolbar.dual_output_requested.connect(toggle_dual_output)
 
 	# Select the first surface
 	if not SurfaceManager.surfaces.is_empty():
@@ -34,6 +42,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 		# Mode toggles
 		if key.keycode == KEY_F11 or key.keycode == KEY_TAB:
+			if _output_window != null:
+				# Block single-window output mode toggle while dual output is active
+				get_viewport().set_input_as_handled()
+				return
 			SurfaceManager.toggle_output_mode()
 			get_viewport().set_input_as_handled()
 			return
@@ -54,6 +66,9 @@ func _unhandled_key_input(event: InputEvent) -> void:
 					get_viewport().set_input_as_handled()
 				KEY_N:
 					SurfaceManager.add_surface()
+					get_viewport().set_input_as_handled()
+				KEY_D:
+					toggle_dual_output()
 					get_viewport().set_input_as_handled()
 			return
 
@@ -112,3 +127,34 @@ func _on_mode_changed(is_output: bool) -> void:
 	else:
 		# Restore whatever window mode we had before output mode
 		DisplayServer.window_set_mode(_pre_output_window_mode)
+
+
+func toggle_dual_output() -> void:
+	if _output_window:
+		_close_output_window()
+	else:
+		_open_output_window()
+
+
+func _open_output_window() -> void:
+	var display_idx: int = toolbar.get_selected_display()
+	_output_window = OutputWindow.new()
+	_output_window.force_native = true  # Must be set before add_child to get a real OS window
+	_output_window.visible = false      # Hide until positioned
+	add_child(_output_window)
+	_output_window.open_on_display(display_idx)
+	_output_window.output_window_closed.connect(_on_output_window_closed)
+	toolbar.set_dual_output_active(true)
+
+
+func _close_output_window() -> void:
+	if _output_window:
+		_output_window.output_window_closed.disconnect(_on_output_window_closed)
+		_output_window.queue_free()
+		_output_window = null
+	toolbar.set_dual_output_active(false)
+
+
+func _on_output_window_closed() -> void:
+	_output_window = null
+	toolbar.set_dual_output_active(false)

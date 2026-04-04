@@ -4,16 +4,30 @@ extends Control
 
 var surface_scene: PackedScene = preload("res://scenes/projection_surface.tscn")
 var surface_nodes: Dictionary = {}  # id -> ProjectionSurface node
+var output_only: bool = false
 
 
 func _ready() -> void:
 	add_to_group("projection_canvas")
+	if not output_only:
+		SurfaceManager.surface_added.connect(_on_surface_added)
+		SurfaceManager.surface_removed.connect(_on_surface_removed)
+		SurfaceManager.surface_selected.connect(_on_surface_selected)
+
+
+func initialize_output_mode() -> void:
+	output_only = true
 	SurfaceManager.surface_added.connect(_on_surface_added)
 	SurfaceManager.surface_removed.connect(_on_surface_removed)
-	SurfaceManager.surface_selected.connect(_on_surface_selected)
+	SurfaceManager.surface_updated.connect(_on_surface_updated)
+	# Sync all existing surfaces
+	for s in SurfaceManager.surfaces:
+		_on_surface_added(s["id"])
 
 
 func _input(event: InputEvent) -> void:
+	if output_only:
+		return
 	if SurfaceManager.is_output_mode:
 		return
 	if event is InputEventMouseButton:
@@ -34,7 +48,7 @@ func _input(event: InputEvent) -> void:
 func _on_surface_added(id: String) -> void:
 	var node: Control = surface_scene.instantiate()
 	add_child(node)
-	node.initialize(id)
+	node.initialize(id, output_only)
 	surface_nodes[id] = node
 
 	# Initially hide handles (will show when selected)
@@ -46,6 +60,13 @@ func _on_surface_removed(id: String) -> void:
 		var node: Control = surface_nodes[id]
 		node.queue_free()
 		surface_nodes.erase(id)
+
+
+func _on_surface_updated(_id: String) -> void:
+	# Each ProjectionSurface handles its own updates via SurfaceManager.surface_updated.
+	# This callback exists so the output canvas can react to updates at the canvas level
+	# if needed in the future.
+	pass
 
 
 func _on_surface_selected(id: String) -> void:
