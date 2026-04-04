@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LightMapAI — AWE 2026 Research Poster</title>
+<style>
+  @page { size: 48in 36in; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 48in; height: 36in;
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    background: linear-gradient(135deg, #0a0a1a 0%, #0d1b2a 40%, #1b0a2e 100%);
+    color: #e8e8f0;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    padding: 0.6in;
+    gap: 0.4in;
+    overflow: hidden;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    border-bottom: 4px solid #7c5cbf;
+    padding-bottom: 0.3in;
+  }
+  .header h1 {
+    font-size: 96pt;
+    font-weight: 800;
+    background: linear-gradient(90deg, #a78bfa, #38bdf8, #34d399);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1.1;
+    letter-spacing: -1px;
+  }
+  .header .subtitle {
+    font-size: 42pt;
+    color: #94a3b8;
+    margin-top: 0.15in;
+    font-weight: 300;
+  }
+  .header .author {
+    font-size: 32pt;
+    color: #7c5cbf;
+    margin-top: 0.15in;
+    font-weight: 600;
+  }
+  .header .repo {
+    font-size: 24pt;
+    color: #64748b;
+    margin-top: 0.08in;
+    font-family: monospace;
+  }
+
+  /* Main content grid */
+  .content {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0.4in;
+  }
+
+  .card {
+    background: rgba(255,255,255,0.04);
+    border: 2px solid rgba(124,92,191,0.3);
+    border-radius: 20px;
+    padding: 0.4in;
+  }
+  .card h2 {
+    font-size: 36pt;
+    font-weight: 700;
+    color: #a78bfa;
+    margin-bottom: 0.2in;
+    border-bottom: 2px solid rgba(124,92,191,0.3);
+    padding-bottom: 0.1in;
+  }
+  .card p, .card li {
+    font-size: 24pt;
+    line-height: 1.5;
+    color: #cbd5e1;
+  }
+  .card ul {
+    list-style: none;
+    padding: 0;
+  }
+  .card ul li {
+    padding-left: 0.3in;
+    position: relative;
+    margin-bottom: 0.08in;
+  }
+  .card ul li::before {
+    content: "▸";
+    position: absolute;
+    left: 0;
+    color: #7c5cbf;
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <h1>LightMapAI</h1>
+  <div class="subtitle">AI-Driven Projection Mapping for Ambient Spatial Computing</div>
+  <div class="author">Naman Rajpal</div>
+  <div class="repo">github.com/namanrajpal/LightMapAI</div>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="content">
+
+  <!-- Column 1 -->
+  <div style="display:flex; flex-direction:column; gap:0.4in;">
+
+    <div class="card">
+      <h2>Abstract</h2>
+      <p>We present LightMapAI, an open-source system that combines AI-driven shader generation with real-time projection mapping to enable ambient spatial computing. Users describe visual intent in natural language; the system synthesizes GPU shaders and projects them onto calibrated physical surfaces. Our architecture introduces a proxy-node animation model that bridges Godot Engine's AnimationPlayer to runtime surface property control, enabling live keyframe animation of opacity, color, geometry, and shader parameters without editor dependency. The system performs real-time perspective homography warping with pixel-precise calibration across multiple surfaces.</p>
+    </div>
+
+    <div class="card">
+      <h2>Motivation</h2>
+      <p>Commercial projection mapping tools (MadMapper, Resolume) require expensive licenses and steep learning curves. Artists and researchers with a projector and a creative vision shouldn't need VJ expertise to transform physical spaces. LightMapAI makes ambient spatial computing as simple as describing what you want to see.</p>
+    </div>
+
+  </div>
+
+  <!-- Column 2 -->
+  <div style="display:flex; flex-direction:column; gap:0.4in;">
+
+    <div class="card">
+      <h2>System Architecture</h2>
+      <ul>
+        <li><strong>SurfaceManager</strong> — Central data store for all projection surfaces (position, color, opacity, corners)</li>
+        <li><strong>SurfaceProxy</strong> — Bridge nodes with exported properties that AnimationPlayer targets; setters forward changes to SurfaceManager</li>
+        <li><strong>TimelineManager</strong> — Autoload hosting AnimationPlayer, proxy lifecycle, keyframe CRUD, playback control, JSON serialization</li>
+        <li><strong>AI Shader Generation</strong> — Natural language prompts generate GLSL fragment shaders for surface content via LLM integration</li>
+        <li><strong>Perspective Homography</strong> — Real-time 3×3 matrix inversion maps screen coordinates back to UV space for accurate warping</li>
+        <li><strong>Dual Output</strong> — Setup UI on laptop, clean projection on secondary display simultaneously</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Demo</h2>
+      <p>Live demonstration projecting onto a physical lamp with three independently mapped surfaces. Each surface displays a unique AI-generated shader effect created through natural language prompts. Attendees can interact hands-on: create surfaces, warp them onto objects, generate visuals via AI, and animate properties in real time.</p>
+    </div>
+
+    <div style="border-radius:16px; overflow:hidden; border:2px solid rgba(124,92,191,0.3);">
+      <img src="../image/poster-hero.png" style="width:100%; display:block;" />
+    </div>
+
+  </div>
+
+  <!-- Column 3 -->
+  <div style="display:flex; flex-direction:column; gap:0.4in;">
+
+    <div class="card">
+      <h2>Key Contributions</h2>
+      <ul>
+        <li>AI shader generation from natural language — describe a visual, project it onto physical space</li>
+        <li>Proxy-node animation architecture enabling runtime keyframe editing without Godot's editor</li>
+        <li>Open-source alternative to commercial projection mapping software (under 3MB)</li>
+        <li>Pixel-precise corner calibration with real-time homography computation</li>
+        <li>JSON serialization for portable, shareable show files</li>
+        <li>Animated opacity, color, visibility, z-order, and geometry with 5 easing types</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Future Work</h2>
+      <ul>
+        <li>OSC/MIDI integration for live performance control</li>
+        <li>Audio-reactive shader parameters driven by FFT analysis</li>
+        <li>Bezier edge warping for curved surface mapping</li>
+        <li>Multi-projector edge blending</li>
+        <li>Cue list sequencer for show automation</li>
+        <li>BPM sync for music-driven performances</li>
+      </ul>
+    </div>
+
+    <div class="card" style="text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+      <h2>Open Source</h2>
+      <p style="font-size:28pt; margin-bottom:0.2in;">Built with Godot Engine 4.x</p>
+      <p style="font-size:28pt;">GDScript · GL Compatibility · Cross-platform</p>
+      <p style="font-size:22pt; color:#64748b; margin-top:0.2in;">github.com/namanrajpal/LightMapAI</p>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<div style="text-align:center; color:#475569; font-size:20pt; padding-top:0.1in; border-top: 2px solid rgba(124,92,191,0.2);">
+  AWE USA 2026 · Research Poster · June 15–18 · Santa Clara, CA
+</div>
+
+</body>
+</html>

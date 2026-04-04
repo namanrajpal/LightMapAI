@@ -10,6 +10,7 @@ extends Control
 @onready var projection_canvas: Control = %ProjectionCanvas
 @onready var canvas_bg: ColorRect = %CanvasBG
 @onready var toolbar: HBoxContainer = %Toolbar
+@onready var timeline_panel: VBoxContainer = %TimelinePanel
 
 var _pre_output_window_mode: DisplayServer.WindowMode
 var _output_window: Window = null
@@ -71,6 +72,33 @@ func _unhandled_key_input(event: InputEvent) -> void:
 					toggle_dual_output()
 					get_viewport().set_input_as_handled()
 			return
+
+		# Timeline shortcuts (no Ctrl, only when TimelinePanel is visible)
+		if timeline_panel and timeline_panel.visible:
+			match key.keycode:
+				KEY_SPACE:
+					if TimelineManager.is_playing():
+						TimelineManager.pause()
+					else:
+						TimelineManager.play()
+					get_viewport().set_input_as_handled()
+					return
+				KEY_HOME:
+					TimelineManager.seek(0.0)
+					get_viewport().set_input_as_handled()
+					return
+				KEY_END:
+					TimelineManager.seek(TimelineManager.get_duration())
+					get_viewport().set_input_as_handled()
+					return
+				KEY_LEFT:
+					TimelineManager.step_backward()
+					get_viewport().set_input_as_handled()
+					return
+				KEY_RIGHT:
+					TimelineManager.step_forward()
+					get_viewport().set_input_as_handled()
+					return
 
 		# Shortcuts when a surface is selected (no Ctrl)
 		var sel_id := SurfaceManager.selected_surface_id

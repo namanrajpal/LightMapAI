@@ -1,10 +1,11 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/app.gd" id="1_app"]
 [ext_resource type="Script" path="res://scripts/sidebar.gd" id="2_sidebar"]
 [ext_resource type="Script" path="res://scripts/toolbar.gd" id="3_toolbar"]
 [ext_resource type="Script" path="res://scripts/status_bar.gd" id="4_status_bar"]
 [ext_resource type="Script" path="res://scripts/projection_canvas.gd" id="5_canvas"]
+[ext_resource type="Script" path="res://scripts/timeline_panel.gd" id="6_timeline"]
 
 [node name="App" type="Control"]
 layout_mode = 3
@@ -140,6 +141,12 @@ text = "+ Add Surface"
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
+
+[node name="TimelinePanel" type="VBoxContainer" parent="UILayer"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 200)
+script = ExtResource("6_timeline")
 
 [node name="StatusBar" type="PanelContainer" parent="UILayer"]
 unique_name_in_owner = true

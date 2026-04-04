@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://github.com/namanrajpal/LightMapAI/raw/main/docs/AWE_demo.mp4">
-    <img src="docs/image/video-thumbnail.jpg" alt="Watch Demo Video" width="600">
+    <img src="docs/image/demo-preview.jpg" alt="Watch Demo Video" width="600">
   </a>
   <br>
   <em>▶ Click to watch demo video</em>
