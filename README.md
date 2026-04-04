@@ -1,13 +1,13 @@
 <p align="center">
   <a href="https://github.com/namanrajpal/LightMapAI/raw/main/docs/AWE_demo.mp4">
-    <img src="docs/image/video-thumbnail.jpg" alt="Watch Demo Video" width="100%">
+    <img src="docs/image/video-thumbnail.jpg" alt="Watch Demo Video" width="600">
   </a>
   <br>
   <em>▶ Click to watch demo video</em>
 </p>
 
 <p align="center">
-  <img src="docs/image/poster-hero.png" alt="LightMapAI Hero" width="100%">
+  <img src="docs/image/poster-hero.png" alt="LightMapAI Hero" width="600">
 </p>
 
 <h1 align="center">LightMapAI</h1>
