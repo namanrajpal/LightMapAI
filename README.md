@@ -1,5 +1,9 @@
 <p align="center">
-  <video src="https://github.com/namanrajpal/LightMapAI/raw/main/docs/AWE_demo.mp4" width="100%" autoplay loop muted playsinline></video>
+  <a href="https://github.com/namanrajpal/LightMapAI/raw/main/docs/AWE_demo.mp4">
+    <img src="docs/image/video-thumbnail.jpg" alt="Watch Demo Video" width="100%">
+  </a>
+  <br>
+  <em>▶ Click to watch demo video</em>
 </p>
 
 <p align="center">
@@ -27,8 +31,6 @@
 ## Why LightMapAI?
 
 Commercial projection mapping tools (MadMapper, Resolume) require expensive licenses and steep learning curves. LightMapAI is a free, open-source alternative that makes ambient spatial computing as simple as describing what you want to see. Built with **Godot 4.x** in under 3 MB.
-
-> 🎤 Being presented at **AWE USA 2026** — June 15–18, Santa Clara, CA.
 
 ## Features
 
