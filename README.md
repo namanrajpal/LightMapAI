@@ -6,9 +6,12 @@ Naman Rajpal · [github.com/namanrajpal/LightMapAI](https://github.com/namanrajp
 
 <p align="center">
 <a href="https://github.com/namanrajpal/LightMapAI/raw/main/docs/AWE_demo.mp4">
-<img src="docs/image/demo-preview.jpg" alt="Watch Demo Video" width="360">
-</a><br>
-<em>▶ Click to watch demo video</em>
+<img src="docs/image/demo-preview.jpg" alt="Watch Demo Video" width="260">
+</a>
+<img src="docs/image/demo1.gif" alt="Demo 1" width="260">
+<img src="docs/image/demo2.gif" alt="Demo 2" width="260">
+<br>
+<em>▶ Demo video &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Projection demo 1 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Projection demo 2</em>
 </p>
 
 ---
@@ -33,16 +36,6 @@ This work explores the intersection of two domains: **projection mapping** as a 
 <p align="center">
 <img src="docs/image/ai-integration.gif" alt="AI integration — generating shaders from natural language" width="480"><br>
 <em>Fig. 2: AI-driven shader generation from natural language description</em>
-</p>
-
-<p align="center">
-<img src="docs/image/demo1.gif" alt="Demo 1" width="480"><br>
-<em>Fig. 3: Multi-surface projection mapping demo</em>
-</p>
-
-<p align="center">
-<img src="docs/image/demo2.gif" alt="Demo 2" width="480"><br>
-<em>Fig. 4: Live projection on physical surfaces</em>
 </p>
 
 
