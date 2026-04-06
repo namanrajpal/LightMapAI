@@ -112,10 +112,10 @@ func get_selected_surface() -> Dictionary:
 
 
 ## Updates the corner positions for a surface.
-func update_corners(id: String, corners: PackedVector2Array) -> void:
+func update_corners(id: String, new_corners: PackedVector2Array) -> void:
 	for s in surfaces:
 		if s["id"] == id:
-			s["corners"] = corners
+			s["corners"] = new_corners.duplicate()
 			surface_updated.emit(id)
 			return
 
@@ -127,6 +127,50 @@ func update_surface_property(id: String, key: String, value: Variant) -> void:
 			s[key] = value
 			surface_updated.emit(id)
 			return
+
+
+## Add a corner to a surface at the midpoint of the longest edge.
+## If after_index is -1, auto-picks the longest edge.
+func add_corner_to_surface(id: String, after_index: int = -1) -> void:
+	var s := get_surface(id)
+	if s.is_empty():
+		return
+	var corners: PackedVector2Array = s["corners"].duplicate()
+	if corners.size() < 3:
+		return
+
+	# Find the longest edge if no index specified
+	if after_index < 0:
+		var best_len := 0.0
+		for i in range(corners.size()):
+			var edge_len := corners[i].distance_to(corners[(i + 1) % corners.size()])
+			if edge_len > best_len:
+				best_len = edge_len
+				after_index = i
+
+	# Insert at midpoint of edge after_index -> (after_index+1)
+	var a := corners[after_index]
+	var b := corners[(after_index + 1) % corners.size()]
+	var midpoint := (a + b) / 2.0
+	corners.insert(after_index + 1, midpoint)
+	s["corners"] = corners
+	surface_updated.emit(id)
+
+
+## Remove a corner from a surface by index. Minimum 3 corners enforced.
+func remove_corner_from_surface(id: String, corner_index: int) -> void:
+	var s := get_surface(id)
+	if s.is_empty():
+		return
+	var corners: PackedVector2Array = s["corners"].duplicate()
+	if corners.size() <= 3:
+		push_warning("SurfaceManager: Cannot remove corner — minimum 3 corners required.")
+		return
+	if corner_index < 0 or corner_index >= corners.size():
+		return
+	corners.remove_at(corner_index)
+	s["corners"] = corners
+	surface_updated.emit(id)
 
 
 ## Move surface forward in z-order.
@@ -208,6 +252,9 @@ func save_config(path: String) -> Error:
 
 	for s in surfaces:
 		var corners: PackedVector2Array = s["corners"]
+		var corners_arr: Array = []
+		for c in corners:
+			corners_arr.append([c.x, c.y])
 		data["surfaces"].append({
 			"id": s["id"],
 			"label": s["label"],
@@ -223,12 +270,7 @@ func save_config(path: String) -> Error:
 			"shader_params": s.get("shader_params", {}),
 			"description": s.get("description", ""),
 			"tags": s.get("tags", []),
-			"corners": {
-				"tl": [corners[0].x, corners[0].y],
-				"tr": [corners[1].x, corners[1].y],
-				"br": [corners[2].x, corners[2].y],
-				"bl": [corners[3].x, corners[3].y],
-			},
+			"corners": corners_arr,
 		})
 
 	var json_string := JSON.stringify(data, "\t")
@@ -283,13 +325,18 @@ func load_config(path: String) -> Error:
 	# Rebuild
 	_next_color_index = 0
 	for sd in data["surfaces"]:
-		var corners_dict: Dictionary = sd["corners"]
-		var corners := PackedVector2Array([
-			Vector2(corners_dict["tl"][0], corners_dict["tl"][1]),
-			Vector2(corners_dict["tr"][0], corners_dict["tr"][1]),
-			Vector2(corners_dict["br"][0], corners_dict["br"][1]),
-			Vector2(corners_dict["bl"][0], corners_dict["bl"][1]),
-		])
+		# Support both old dict format {tl,tr,br,bl} and new array format [[x,y], ...]
+		var corners := PackedVector2Array()
+		var corners_data = sd["corners"]
+		if corners_data is Array:
+			for pt in corners_data:
+				corners.append(Vector2(pt[0], pt[1]))
+		elif corners_data is Dictionary:
+			var cd: Dictionary = corners_data
+			corners.append(Vector2(cd["tl"][0], cd["tl"][1]))
+			corners.append(Vector2(cd["tr"][0], cd["tr"][1]))
+			corners.append(Vector2(cd["br"][0], cd["br"][1]))
+			corners.append(Vector2(cd["bl"][0], cd["bl"][1]))
 
 		var surface := {
 			"id": sd.get("id", generate_id()),
@@ -372,10 +419,18 @@ func get_surface_dimensions(id: String) -> Dictionary:
 	if s.is_empty():
 		return {"width": 0, "height": 0, "aspect": 1.0, "orientation": "square"}
 	var corners: PackedVector2Array = s["corners"]
-	if corners.size() < 4:
+	if corners.size() < 3:
 		return {"width": 0, "height": 0, "aspect": 1.0, "orientation": "square"}
-	var w: float = ((corners[1] - corners[0]).length() + (corners[2] - corners[3]).length()) / 2.0
-	var h: float = ((corners[3] - corners[0]).length() + (corners[2] - corners[1]).length()) / 2.0
+	# Use bounding box for any polygon
+	var min_pt := corners[0]
+	var max_pt := corners[0]
+	for c in corners:
+		min_pt.x = minf(min_pt.x, c.x)
+		min_pt.y = minf(min_pt.y, c.y)
+		max_pt.x = maxf(max_pt.x, c.x)
+		max_pt.y = maxf(max_pt.y, c.y)
+	var w: float = max_pt.x - min_pt.x
+	var h: float = max_pt.y - min_pt.y
 	var aspect: float = w / maxf(h, 0.001)
 	var orientation := "square"
 	if aspect > 1.1:

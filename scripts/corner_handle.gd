@@ -23,6 +23,11 @@ var color_outline := Color(0.0, 0.0, 0.0, 0.8)
 
 const CORNER_LABELS := ["TL", "TR", "BR", "BL"]
 
+func _get_corner_label() -> String:
+	if corner_index < CORNER_LABELS.size():
+		return CORNER_LABELS[corner_index]
+	return str(corner_index + 1)
+
 
 func _ready() -> void:
 	# The handle is a small control; we position its center at the corner
@@ -59,7 +64,7 @@ func _draw() -> void:
 
 	# Corner label
 	if is_selected or is_hovered:
-		var label_text: String = CORNER_LABELS[corner_index] if corner_index < CORNER_LABELS.size() else "?"
+		var label_text: String = _get_corner_label()
 		var font := ThemeDB.fallback_font
 		var font_size := 11
 		var text_size := font.get_string_size(label_text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)

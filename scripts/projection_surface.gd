@@ -63,8 +63,6 @@ var _drag_start_corners: PackedVector2Array = PackedVector2Array()
 # ---------------------------------------------------------------------------
 func _ready() -> void:
 	_create_warp_polygon()
-	if not output_only:
-		_create_corner_handles()
 
 	SurfaceManager.surface_selected.connect(_on_surface_selected)
 	SurfaceManager.surface_updated.connect(_on_surface_updated)
@@ -86,6 +84,9 @@ func initialize(id: String, p_output_only: bool = false) -> void:
 	show_grid = s["grid_on"]
 	_opacity = s.get("opacity", 1.0)
 	_fit_mode = s.get("fit_mode", "stretch")
+
+	if not output_only:
+		_create_corner_handles()
 
 	_update_polygon()
 	_position_handles()
@@ -109,7 +110,7 @@ func _create_warp_polygon() -> void:
 
 
 func _create_corner_handles() -> void:
-	for i in range(4):
+	for i in range(corners.size()):
 		var handle: Control = corner_handle_scene.instantiate()
 		handle.corner_index = i
 		handle.name = "Handle_%d" % i
@@ -122,10 +123,10 @@ func _create_corner_handles() -> void:
 # Geometry updates
 # ---------------------------------------------------------------------------
 func _update_polygon() -> void:
-	if corners.size() < 4:
+	if corners.size() < 3:
 		return
 
-	# Set polygon vertices directly to corner positions (TL, TR, BR, BL)
+	# Set polygon vertices directly to corner positions
 	warp_polygon.polygon = corners
 	warp_polygon.color = surface_color
 
@@ -138,8 +139,18 @@ func _update_polygon() -> void:
 
 	if active_texture:
 		warp_polygon.texture = active_texture
-		warp_polygon.uv = _compute_fit_uvs(active_texture)
-		# When showing a texture, use white color so texture isn't tinted
+		# For shader content on quads, use canonical UVs so edge-distance
+		# shaders work correctly regardless of polygon warp shape
+		if _shader_material and corners.size() == 4:
+			var tex_size := active_texture.get_size()
+			warp_polygon.uv = PackedVector2Array([
+				Vector2(0, 0),
+				Vector2(tex_size.x, 0),
+				Vector2(tex_size.x, tex_size.y),
+				Vector2(0, tex_size.y),
+			])
+		else:
+			warp_polygon.uv = _compute_fit_uvs(active_texture)
 		warp_polygon.color = Color.WHITE
 	else:
 		warp_polygon.texture = null
@@ -150,8 +161,8 @@ func _update_polygon() -> void:
 
 
 func _position_handles() -> void:
-	for i in range(4):
-		if i < corner_handles.size() and i < corners.size():
+	for i in range(corners.size()):
+		if i < corner_handles.size():
 			corner_handles[i].set_corner_position(corners[i])
 
 
@@ -159,7 +170,7 @@ func _position_handles() -> void:
 # Custom drawing: grid + selection border
 # ---------------------------------------------------------------------------
 func _draw() -> void:
-	if corners.size() < 4:
+	if corners.size() < 3:
 		return
 
 	if output_only:
@@ -167,9 +178,9 @@ func _draw() -> void:
 
 	# Draw selection border
 	if _is_selected and not SurfaceManager.is_output_mode:
-		for i in range(4):
+		for i in range(corners.size()):
 			var a := corners[i]
-			var b := corners[(i + 1) % 4]
+			var b := corners[(i + 1) % corners.size()]
 			draw_line(a, b, SELECTION_BORDER_COLOR, SELECTION_BORDER_WIDTH)
 
 	# Draw grid
@@ -178,30 +189,26 @@ func _draw() -> void:
 
 
 func _draw_grid() -> void:
-	var tl := corners[0]
-	var tr := corners[1]
-	var br := corners[2]
-	var bl := corners[3]
+	# Draw border for any polygon
+	for i in range(corners.size()):
+		var a := corners[i]
+		var b := corners[(i + 1) % corners.size()]
+		draw_line(a, b, GRID_BORDER_COLOR, GRID_BORDER_WIDTH)
 
-	# Draw border
-	draw_line(tl, tr, GRID_BORDER_COLOR, GRID_BORDER_WIDTH)
-	draw_line(tr, br, GRID_BORDER_COLOR, GRID_BORDER_WIDTH)
-	draw_line(br, bl, GRID_BORDER_COLOR, GRID_BORDER_WIDTH)
-	draw_line(bl, tl, GRID_BORDER_COLOR, GRID_BORDER_WIDTH)
-
-	# Draw interior grid lines using bilinear interpolation
-	for i in range(1, GRID_DIVISIONS):
-		var t: float = float(i) / float(GRID_DIVISIONS)
-
-		# Horizontal lines: interpolate between left edge and right edge
-		var left := tl.lerp(bl, t)
-		var right := tr.lerp(br, t)
-		draw_line(left, right, GRID_LINE_COLOR, GRID_LINE_WIDTH)
-
-		# Vertical lines: interpolate between top edge and bottom edge
-		var top := tl.lerp(tr, t)
-		var bottom := bl.lerp(br, t)
-		draw_line(top, bottom, GRID_LINE_COLOR, GRID_LINE_WIDTH)
+	# Interior grid lines only for quads (4 corners)
+	if corners.size() == 4:
+		var tl := corners[0]
+		var tr := corners[1]
+		var br := corners[2]
+		var bl := corners[3]
+		for i in range(1, GRID_DIVISIONS):
+			var t: float = float(i) / float(GRID_DIVISIONS)
+			var left := tl.lerp(bl, t)
+			var right := tr.lerp(br, t)
+			draw_line(left, right, GRID_LINE_COLOR, GRID_LINE_WIDTH)
+			var top := tl.lerp(tr, t)
+			var bottom := bl.lerp(br, t)
+			draw_line(top, bottom, GRID_LINE_COLOR, GRID_LINE_WIDTH)
 
 
 # ---------------------------------------------------------------------------
@@ -409,10 +416,15 @@ func _load_shader(effect_id: String) -> void:
 		push_error("ProjectionSurface: Shader effect not found: %s" % effect_id)
 		return
 
-	# Create a SubViewport with a ColorRect running the effect shader
+	# Size the viewport to match the polygon's bounding box aspect ratio
+	# so the shader renders at correct proportions before being mapped
+	var bbox := _get_corners_bbox()
+	var vp_w := int(clampf(bbox.size.x, 128, 2048))
+	var vp_h := int(clampf(bbox.size.y, 128, 2048))
+
 	_shader_viewport = SubViewport.new()
 	_shader_viewport.name = "ShaderViewport"
-	_shader_viewport.size = Vector2i(1024, 1024)
+	_shader_viewport.size = Vector2i(vp_w, vp_h)
 	_shader_viewport.transparent_bg = false
 	_shader_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	add_child(_shader_viewport)
@@ -420,11 +432,11 @@ func _load_shader(effect_id: String) -> void:
 	_shader_rect = ColorRect.new()
 	_shader_rect.name = "ShaderRect"
 	_shader_rect.anchors_preset = Control.PRESET_FULL_RECT
-	_shader_rect.size = Vector2(1024, 1024)
+	_shader_rect.size = Vector2(vp_w, vp_h)
 
 	_shader_material = ShaderRegistry.create_material(effect_id)
 	if _shader_material:
-		_shader_material.set_shader_parameter("_resolution", Vector2(1024, 1024))
+		_shader_material.set_shader_parameter("_resolution", Vector2(vp_w, vp_h))
 		_shader_rect.material = _shader_material
 	_shader_viewport.add_child(_shader_rect)
 
@@ -508,70 +520,138 @@ func set_opacity(opacity: float) -> void:
 # ---------------------------------------------------------------------------
 func _compute_fit_uvs(texture: Texture2D) -> PackedVector2Array:
 	## Compute UV coordinates based on fit mode and texture aspect ratio.
-	## Returns 4 UVs for TL, TR, BR, BL in PIXEL coordinates (Polygon2D requirement).
+	## For N-point polygons, maps UVs using bounding-box normalization.
 	if not texture:
-		return PackedVector2Array([
-			Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)
-		])
+		# Default: normalize corners to [0,1] range via bounding box
+		return _compute_bbox_uvs(Vector2(1, 1))
 
 	var tex_size := texture.get_size()
 	if tex_size.x <= 0 or tex_size.y <= 0:
-		return PackedVector2Array([
-			Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)
-		])
+		return _compute_bbox_uvs(Vector2(1, 1))
 
 	var w: float = tex_size.x
 	var h: float = tex_size.y
-	var tex_aspect: float = w / h
-
-	# Compute the quad's approximate aspect ratio
-	var quad_width: float = (corners[1] - corners[0]).length()
-	var quad_height: float = (corners[3] - corners[0]).length()
-	if quad_width <= 0 or quad_height <= 0:
-		return PackedVector2Array([
-			Vector2(0, 0), Vector2(w, 0), Vector2(w, h), Vector2(0, h)
-		])
-
-	var quad_aspect: float = quad_width / quad_height
 
 	match _fit_mode:
 		"stretch":
-			# Full texture mapped to full quad
-			return PackedVector2Array([
-				Vector2(0, 0), Vector2(w, 0), Vector2(w, h), Vector2(0, h)
-			])
+			return _compute_bbox_uvs(tex_size)
 		"fit":
-			# Show full texture, same as stretch for Polygon2D
-			# (true letterboxing would need a SubViewport)
-			return PackedVector2Array([
-				Vector2(0, 0), Vector2(w, 0), Vector2(w, h), Vector2(0, h)
-			])
+			return _compute_bbox_uvs(tex_size)
 		"fill":
-			# Crop: scale content to cover quad, crop overflow
+			# Compute bounding box aspect
+			var bbox := _get_corners_bbox()
+			var bbox_w: float = bbox.size.x
+			var bbox_h: float = bbox.size.y
+			if bbox_w <= 0 or bbox_h <= 0:
+				return _compute_bbox_uvs(tex_size)
+			var quad_aspect: float = bbox_w / bbox_h
+			var tex_aspect: float = w / h
 			if tex_aspect > quad_aspect:
-				# Content wider — crop sides
 				var visible_w: float = h * quad_aspect
 				var offset_x: float = (w - visible_w) / 2.0
-				return PackedVector2Array([
-					Vector2(offset_x, 0),
-					Vector2(offset_x + visible_w, 0),
-					Vector2(offset_x + visible_w, h),
-					Vector2(offset_x, h)
-				])
+				return _compute_bbox_uvs_with_crop(tex_size, Rect2(offset_x, 0, visible_w, h))
 			else:
-				# Content taller — crop top/bottom
 				var visible_h: float = w / quad_aspect
 				var offset_y: float = (h - visible_h) / 2.0
-				return PackedVector2Array([
-					Vector2(0, offset_y),
-					Vector2(w, offset_y),
-					Vector2(w, offset_y + visible_h),
-					Vector2(0, offset_y + visible_h)
-				])
+				return _compute_bbox_uvs_with_crop(tex_size, Rect2(0, offset_y, w, visible_h))
 
-	return PackedVector2Array([
-		Vector2(0, 0), Vector2(w, 0), Vector2(w, h), Vector2(0, h)
-	])
+	return _compute_bbox_uvs(tex_size)
+
+
+## Compute UVs by normalizing corner positions within their bounding box,
+## then scaling to texture pixel coordinates.
+func _compute_bbox_uvs(tex_size: Vector2) -> PackedVector2Array:
+	var bbox := _get_corners_bbox()
+	var uvs := PackedVector2Array()
+	for c in corners:
+		var u: float = (c.x - bbox.position.x) / maxf(bbox.size.x, 1.0) * tex_size.x
+		var v: float = (c.y - bbox.position.y) / maxf(bbox.size.y, 1.0) * tex_size.y
+		uvs.append(Vector2(u, v))
+	return uvs
+
+
+func _compute_bbox_uvs_with_crop(tex_size: Vector2, crop: Rect2) -> PackedVector2Array:
+	var bbox := _get_corners_bbox()
+	var uvs := PackedVector2Array()
+	for c in corners:
+		var norm_x: float = (c.x - bbox.position.x) / maxf(bbox.size.x, 1.0)
+		var norm_y: float = (c.y - bbox.position.y) / maxf(bbox.size.y, 1.0)
+		uvs.append(Vector2(crop.position.x + norm_x * crop.size.x, crop.position.y + norm_y * crop.size.y))
+	return uvs
+
+
+func _get_corners_bbox() -> Rect2:
+	if corners.is_empty():
+		return Rect2()
+	var min_pt := corners[0]
+	var max_pt := corners[0]
+	for c in corners:
+		min_pt.x = minf(min_pt.x, c.x)
+		min_pt.y = minf(min_pt.y, c.y)
+		max_pt.x = maxf(max_pt.x, c.x)
+		max_pt.y = maxf(max_pt.y, c.y)
+	return Rect2(min_pt, max_pt - min_pt)
+
+
+## Generate a grayscale texture where each pixel stores the normalized
+## distance from the nearest polygon edge. Used by border shaders to
+## follow the actual polygon shape instead of assuming a rectangle.
+func _generate_edge_distance_texture(width: int, height: int) -> ImageTexture:
+	if corners.size() < 3:
+		return null
+	var bbox := _get_corners_bbox()
+	if bbox.size.x <= 0 or bbox.size.y <= 0:
+		return null
+
+	# Build polygon in UV space (normalized 0-1 within bounding box)
+	var poly_uv := PackedVector2Array()
+	for c in corners:
+		poly_uv.append(Vector2(
+			(c.x - bbox.position.x) / bbox.size.x,
+			(c.y - bbox.position.y) / bbox.size.y
+		))
+
+	# Use a lower resolution for the distance field (faster to compute)
+	var res_w := mini(width, 256)
+	var res_h := mini(height, 256)
+
+	var img := Image.create(res_w, res_h, false, Image.FORMAT_L8)
+
+	# For each pixel, compute distance to nearest polygon edge
+	var max_dist := 0.0
+	var distances := PackedFloat32Array()
+	distances.resize(res_w * res_h)
+
+	for y in range(res_h):
+		for x in range(res_w):
+			var uv := Vector2((float(x) + 0.5) / float(res_w), (float(y) + 0.5) / float(res_h))
+			var min_d := 999.0
+			for i in range(poly_uv.size()):
+				var a := poly_uv[i]
+				var b := poly_uv[(i + 1) % poly_uv.size()]
+				var d := _point_to_segment_distance(uv, a, b)
+				min_d = minf(min_d, d)
+			distances[y * res_w + x] = min_d
+			max_dist = maxf(max_dist, min_d)
+
+	# Normalize and write to image
+	if max_dist > 0.0:
+		for y in range(res_h):
+			for x in range(res_w):
+				var d := distances[y * res_w + x] / max_dist
+				img.set_pixel(x, y, Color(d, d, d, 1.0))
+
+	var tex := ImageTexture.create_from_image(img)
+	return tex
+
+
+## Distance from point p to line segment a→b.
+func _point_to_segment_distance(p: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab := b - a
+	var ap := p - a
+	var t := clampf(ap.dot(ab) / maxf(ab.dot(ab), 0.00001), 0.0, 1.0)
+	var closest := a + ab * t
+	return p.distance_to(closest)
 
 
 # ---------------------------------------------------------------------------
@@ -624,12 +704,36 @@ func _on_surface_updated(id: String) -> void:
 			load_content(new_ct, new_cs)
 
 	var new_corners: PackedVector2Array = s["corners"]
-	if new_corners != corners:
+	var corners_changed: bool = new_corners.size() != corners.size()
+	if not corners_changed:
+		for i in range(new_corners.size()):
+			if new_corners[i] != corners[i]:
+				corners_changed = true
+				break
+	if corners_changed:
 		corners = new_corners.duplicate()
+		if not output_only:
+			_sync_handle_count()
 		_update_polygon()
 		_position_handles()
 
 	_updating = false
+
+
+## Ensure the number of corner handles matches the number of corners.
+func _sync_handle_count() -> void:
+	while corner_handles.size() < corners.size():
+		var i := corner_handles.size()
+		var handle: Control = corner_handle_scene.instantiate()
+		handle.corner_index = i
+		handle.name = "Handle_%d" % i
+		handle.corner_moved.connect(_on_corner_moved)
+		handle.visible = _is_selected and not SurfaceManager.is_output_mode
+		corner_handles.append(handle)
+		add_child(handle)
+	while corner_handles.size() > corners.size():
+		var handle: Control = corner_handles.pop_back()
+		handle.queue_free()
 
 
 func _on_mode_changed(is_output: bool) -> void:
@@ -639,43 +743,37 @@ func _on_mode_changed(is_output: bool) -> void:
 
 
 # ---------------------------------------------------------------------------
-# Click detection + whole-surface dragging
+# Whole-surface dragging (selection is handled by ProjectionCanvas)
 # ---------------------------------------------------------------------------
+
+## Called by ProjectionCanvas to initiate a drag on this surface.
+func start_drag(mouse_pos: Vector2) -> void:
+	# Deselect any focused corner handle
+	for h in corner_handles:
+		if h.has_focus():
+			h.deselect()
+			h.release_focus()
+	_is_dragging = true
+	_drag_start_mouse = mouse_pos
+	_drag_start_corners = corners.duplicate()
+
+
 func _input(event: InputEvent) -> void:
-	if output_only:
-		return
-	if SurfaceManager.is_output_mode:
+	if output_only or SurfaceManager.is_output_mode:
 		return
 
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
-		if mb.button_index == MOUSE_BUTTON_LEFT:
-			if mb.pressed:
-				# Only start drag if click is inside our quad and not on a handle
-				if _point_in_quad(mb.global_position) and not _click_on_handle(mb.global_position):
-					# Deselect any focused corner handle
-					for h in corner_handles:
-						if h.has_focus():
-							h.deselect()
-							h.release_focus()
-					SurfaceManager.select_surface(surface_id)
-					# Start drag if not locked
-					var s := SurfaceManager.get_surface(surface_id)
-					if not s.is_empty() and not s["locked"]:
-						_is_dragging = true
-						_drag_start_mouse = mb.global_position
-						_drag_start_corners = corners.duplicate()
-			else:
-				if _is_dragging:
-					_is_dragging = false
+		if mb.button_index == MOUSE_BUTTON_LEFT and not mb.pressed:
+			if _is_dragging:
+				_is_dragging = false
 
 	elif event is InputEventMouseMotion and _is_dragging:
 		var mm := event as InputEventMouseMotion
 		var delta := mm.global_position - _drag_start_mouse
 
-		# Compute new corners, clamping so no corner leaves the canvas
 		var new_corners := PackedVector2Array()
-		for i in range(4):
+		for i in range(_drag_start_corners.size()):
 			var c := _drag_start_corners[i] + delta
 			c.x = clampf(c.x, 0.0, 1920.0)
 			c.y = clampf(c.y, 0.0, 1080.0)
@@ -688,16 +786,9 @@ func _input(event: InputEvent) -> void:
 
 
 func _point_in_quad(point: Vector2) -> bool:
-	if corners.size() < 4:
+	if corners.size() < 3:
 		return false
-	# Cross product winding test for convex polygon
-	for i in range(4):
-		var a := corners[i]
-		var b := corners[(i + 1) % 4]
-		var cross_val: float = (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x)
-		if cross_val < 0:
-			return false
-	return true
+	return Geometry2D.is_point_in_polygon(point, corners)
 
 
 func _any_handle_has_focus() -> bool:

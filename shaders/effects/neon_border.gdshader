@@ -18,22 +18,13 @@ uniform float corner_radius = 0.0;
 void fragment() {
 	vec2 uv = UV;
 
-	// Distance from each edge
-	float d_left = uv.x;
-	float d_right = 1.0 - uv.x;
-	float d_top = uv.y;
-	float d_bottom = 1.0 - uv.y;
-
-	// Rounded corner SDF
 	float d_edge;
 	if (corner_radius > 0.0) {
 		float r = corner_radius * 0.5;
 		vec2 p = abs(uv - 0.5) - (0.5 - r);
-		d_edge = length(max(p, vec2(0.0))) - r;
-		// Remap so 0 = on the edge, positive = inside
-		d_edge = -d_edge;
+		d_edge = -(length(max(p, vec2(0.0))) - r);
 	} else {
-		d_edge = min(min(d_left, d_right), min(d_top, d_bottom));
+		d_edge = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
 	}
 
 	// Hard border line

@@ -71,11 +71,7 @@ void fragment() {
 		float hue = mod(base_hue + i * 90.0, 360.0);
 
 		// Vary brightness along the perimeter
-		float perimeter_pos = 0.0;
-		if (d_edge == d_top) perimeter_pos = uv.x;
-		else if (d_edge == d_right) perimeter_pos = uv.y;
-		else if (d_edge == d_bottom) perimeter_pos = 1.0 - uv.x;
-		else perimeter_pos = 1.0 - uv.y;
+		float perimeter_pos = uv.x + uv.y;  // Simple perimeter approximation
 
 		float shimmer = 0.7 + 0.3 * sin(perimeter_pos * 12.0 + t * 3.0 + i * 2.0);
 

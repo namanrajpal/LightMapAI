@@ -137,6 +137,34 @@ func _create_surface_card(id: String, s: Dictionary) -> void:
 	del_btn.pressed.connect(func(): SurfaceManager.remove_surface(id))
 	row2.add_child(del_btn)
 
+	# Row 2b: Corner management
+	var row2b := HBoxContainer.new()
+	row2b.name = "Row2b"
+	details.add_child(row2b)
+
+	var corner_count_label := Label.new()
+	corner_count_label.name = "CornerCountLabel"
+	corner_count_label.text = "%d pts" % s["corners"].size()
+	corner_count_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row2b.add_child(corner_count_label)
+
+	var add_corner_btn := Button.new()
+	add_corner_btn.name = "AddCornerBtn"
+	add_corner_btn.text = "+ Corner"
+	add_corner_btn.tooltip_text = "Add a corner at the midpoint of the longest edge"
+	add_corner_btn.pressed.connect(func(): SurfaceManager.add_corner_to_surface(id))
+	row2b.add_child(add_corner_btn)
+
+	var rm_corner_btn := Button.new()
+	rm_corner_btn.name = "RmCornerBtn"
+	rm_corner_btn.text = "- Corner"
+	rm_corner_btn.tooltip_text = "Remove the last corner (min 3)"
+	rm_corner_btn.pressed.connect(func():
+		var surf := SurfaceManager.get_surface(id)
+		if not surf.is_empty():
+			SurfaceManager.remove_corner_from_surface(id, surf["corners"].size() - 1))
+	row2b.add_child(rm_corner_btn)
+
 	# Selection is handled by the ▶ expand button and canvas clicks
 
 	# Row 3: Content — Image/Video/Web/Shader picker + Clear
@@ -277,6 +305,10 @@ func _update_card_content(card: PanelContainer, s: Dictionary) -> void:
 	if lock_btn:
 		lock_btn.text = "🔒" if s["locked"] else "🔓"
 		lock_btn.set_pressed_no_signal(s["locked"])
+
+	var corner_count_label: Label = vbox.get_node("Details/Row2b/CornerCountLabel")
+	if corner_count_label:
+		corner_count_label.text = "%d pts" % s["corners"].size()
 
 	var opacity_slider: HSlider = vbox.get_node("Details/Row4/OpacitySlider")
 	if opacity_slider:
@@ -644,6 +676,16 @@ func _on_pick_shader(id: String) -> void:
 	)
 	vbox.add_child(add_btn)
 
+	# AI Generate button
+	var ai_btn := Button.new()
+	ai_btn.text = "✨  Add Effects with AI..."
+	ai_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	ai_btn.pressed.connect(func():
+		dialog.queue_free()
+		_show_ai_shader_dialog(id)
+	)
+	vbox.add_child(ai_btn)
+
 	dialog.canceled.connect(func(): dialog.queue_free())
 	dialog.confirmed.connect(func(): dialog.queue_free())
 	add_child(dialog)
@@ -912,5 +954,225 @@ func _show_add_shader_dialog(surface_id: String, p_name: String = "", p_emoji: S
 		dialog.queue_free()
 	)
 	dialog.canceled.connect(func(): dialog.queue_free())
+	add_child(dialog)
+	dialog.popup_centered()
+
+
+# ---------------------------------------------------------------------------
+# AI Shader Generation dialog
+# ---------------------------------------------------------------------------
+
+func _show_ai_shader_dialog(surface_id: String) -> void:
+	var dialog := AcceptDialog.new()
+	dialog.title = "✨ Add Effects with AI"
+	dialog.size = Vector2i(650, 600)
+	dialog.ok_button_text = "Close"
+
+	var main_vbox := VBoxContainer.new()
+	main_vbox.add_theme_constant_override("separation", 6)
+	dialog.add_child(main_vbox)
+
+	# Config status
+	if not AiShaderAgent.is_configured():
+		var config_label := Label.new()
+		config_label.text = "⚠ API not configured"
+		config_label.modulate = Color(1.0, 0.6, 0.3, 1.0)
+		main_vbox.add_child(config_label)
+
+	# Settings row
+	var settings_row := HBoxContainer.new()
+	main_vbox.add_child(settings_row)
+
+	var api_url_input := LineEdit.new()
+	api_url_input.text = AiShaderAgent.api_url
+	api_url_input.placeholder_text = "https://api.openai.com/v1/chat/completions"
+	api_url_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	api_url_input.tooltip_text = "API URL (OpenAI-compatible)"
+	settings_row.add_child(api_url_input)
+
+	var settings_row2 := HBoxContainer.new()
+	main_vbox.add_child(settings_row2)
+
+	var api_key_input := LineEdit.new()
+	api_key_input.text = AiShaderAgent.api_key
+	api_key_input.placeholder_text = "API Key (sk-...)"
+	api_key_input.secret = true
+	api_key_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	settings_row2.add_child(api_key_input)
+
+	var model_input := LineEdit.new()
+	model_input.text = AiShaderAgent.model
+	model_input.placeholder_text = "Model"
+	model_input.custom_minimum_size.x = 150
+	settings_row2.add_child(model_input)
+
+	var save_config_btn := Button.new()
+	save_config_btn.text = "💾"
+	save_config_btn.tooltip_text = "Save API settings"
+	save_config_btn.pressed.connect(func():
+		AiShaderAgent.api_url = api_url_input.text.strip_edges()
+		AiShaderAgent.api_key = api_key_input.text.strip_edges()
+		AiShaderAgent.model = model_input.text.strip_edges()
+		AiShaderAgent.save_config()
+	)
+	settings_row2.add_child(save_config_btn)
+
+	main_vbox.add_child(HSeparator.new())
+
+	# Description input
+	var desc_label := Label.new()
+	desc_label.text = "Describe the shader effect you want:"
+	main_vbox.add_child(desc_label)
+
+	var desc_input := TextEdit.new()
+	desc_input.placeholder_text = "e.g., Flowing water with blue and green colors, gentle waves\ne.g., Pulsing red heartbeat border that glows\ne.g., Starfield with twinkling white dots on black"
+	desc_input.custom_minimum_size = Vector2(0, 80)
+	desc_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	desc_input.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	main_vbox.add_child(desc_input)
+
+	# Generate button + status
+	var gen_row := HBoxContainer.new()
+	main_vbox.add_child(gen_row)
+
+	var gen_btn := Button.new()
+	gen_btn.text = "🚀 Generate"
+	gen_btn.custom_minimum_size = Vector2(120, 0)
+	gen_row.add_child(gen_btn)
+
+	var status_label := Label.new()
+	status_label.text = ""
+	status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	status_label.modulate = Color(0.7, 0.7, 0.7, 1.0)
+	gen_row.add_child(status_label)
+
+	# Code preview (read-only until generated)
+	var code_label := Label.new()
+	code_label.text = "Generated shader code:"
+	code_label.visible = false
+	main_vbox.add_child(code_label)
+
+	var code_preview := TextEdit.new()
+	code_preview.editable = false
+	code_preview.custom_minimum_size = Vector2(0, 200)
+	code_preview.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	code_preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	code_preview.wrap_mode = TextEdit.LINE_WRAPPING_NONE
+	code_preview.visible = false
+	main_vbox.add_child(code_preview)
+
+	# Action buttons (shown after generation)
+	var action_row := HBoxContainer.new()
+	action_row.visible = false
+	main_vbox.add_child(action_row)
+
+	var apply_btn := Button.new()
+	apply_btn.text = "✅ Save & Apply"
+	action_row.add_child(apply_btn)
+
+	var retry_btn := Button.new()
+	retry_btn.text = "🔄 Retry"
+	action_row.add_child(retry_btn)
+
+	var edit_btn := Button.new()
+	edit_btn.text = "✏️ Edit & Save"
+	action_row.add_child(edit_btn)
+
+	# --- Signal handling ---
+	var _generated_code := ""
+
+	# Handle generation completion
+	var on_completed := func(shader_code: String, error: String) -> void:
+		gen_btn.disabled = false
+		gen_btn.text = "🚀 Generate"
+
+		if not error.is_empty():
+			status_label.text = "⚠ " + error
+			status_label.modulate = Color(1.0, 0.4, 0.4, 1.0)
+			if not shader_code.is_empty():
+				# Show code even with errors (for inspection)
+				code_preview.text = shader_code
+				code_preview.visible = true
+				code_label.visible = true
+				code_preview.editable = true  # Let them fix it
+				action_row.visible = true
+			return
+
+		status_label.text = "✅ Generated successfully"
+		status_label.modulate = Color(0.4, 1.0, 0.4, 1.0)
+		code_preview.text = shader_code
+		code_preview.visible = true
+		code_label.visible = true
+		action_row.visible = true
+		_generated_code = shader_code
+
+	AiShaderAgent.generation_completed.connect(on_completed)
+
+	# Generate button
+	gen_btn.pressed.connect(func():
+		var description: String = desc_input.text.strip_edges()
+		if description.is_empty():
+			status_label.text = "⚠ Please describe the shader"
+			status_label.modulate = Color(1.0, 0.6, 0.3, 1.0)
+			return
+		# Save config in case they just entered it
+		AiShaderAgent.api_url = api_url_input.text.strip_edges()
+		AiShaderAgent.api_key = api_key_input.text.strip_edges()
+		AiShaderAgent.model = model_input.text.strip_edges()
+		AiShaderAgent.save_config()
+
+		gen_btn.disabled = true
+		gen_btn.text = "⏳ Generating..."
+		status_label.text = "Sending to AI..."
+		status_label.modulate = Color(0.7, 0.7, 0.7, 1.0)
+		action_row.visible = false
+		AiShaderAgent.generate_shader(description)
+	)
+
+	# Retry
+	retry_btn.pressed.connect(func():
+		gen_btn.disabled = true
+		gen_btn.text = "⏳ Generating..."
+		status_label.text = "Retrying..."
+		status_label.modulate = Color(0.7, 0.7, 0.7, 1.0)
+		action_row.visible = false
+		AiShaderAgent.generate_shader(desc_input.text.strip_edges())
+	)
+
+	# Save & Apply
+	apply_btn.pressed.connect(func():
+		var code: String = code_preview.text.strip_edges()
+		if code.is_empty():
+			return
+		var effect_id := ShaderRegistry.add_user_shader("AI Generated", "AI-generated shader", "✨", code)
+		if effect_id.is_empty():
+			status_label.text = "⚠ Failed to save shader"
+			status_label.modulate = Color(1.0, 0.4, 0.4, 1.0)
+			return
+		SurfaceManager.update_surface_property(surface_id, "shader_params", {})
+		SurfaceManager.update_surface_property(surface_id, "content_type", "shader")
+		SurfaceManager.update_surface_property(surface_id, "content_source", effect_id)
+		_rebuild_shader_params_for_card(surface_id, effect_id)
+		AiShaderAgent.generation_completed.disconnect(on_completed)
+		dialog.queue_free()
+	)
+
+	# Edit & Save — opens the manual add dialog with the generated code pre-filled
+	edit_btn.pressed.connect(func():
+		var code: String = code_preview.text.strip_edges()
+		AiShaderAgent.generation_completed.disconnect(on_completed)
+		dialog.queue_free()
+		_show_add_shader_dialog(surface_id, "", "✨", "", code)
+	)
+
+	# Cleanup on close
+	dialog.canceled.connect(func():
+		AiShaderAgent.generation_completed.disconnect(on_completed)
+		dialog.queue_free()
+	)
+	dialog.confirmed.connect(func():
+		AiShaderAgent.generation_completed.disconnect(on_completed)
+		dialog.queue_free()
+	)
 	add_child(dialog)
 	dialog.popup_centered()

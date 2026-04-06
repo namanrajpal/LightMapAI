@@ -34,16 +34,14 @@ func _update_display() -> void:
 		return
 
 	var corners: PackedVector2Array = s["corners"]
-	if corners.size() < 4:
+	if corners.size() < 3:
 		info_label.text = "%s selected" % s["label"]
 		return
 
 	var mode_text := "OUTPUT" if SurfaceManager.is_output_mode else "SETUP"
-	info_label.text = "%s  |  TL(%d,%d)  TR(%d,%d)  BR(%d,%d)  BL(%d,%d)  |  %s" % [
-		s["label"],
-		int(corners[0].x), int(corners[0].y),
-		int(corners[1].x), int(corners[1].y),
-		int(corners[2].x), int(corners[2].y),
-		int(corners[3].x), int(corners[3].y),
-		mode_text,
-	]
+	var corner_labels := ["TL", "TR", "BR", "BL"]
+	var parts: PackedStringArray = PackedStringArray()
+	for i in range(corners.size()):
+		var label: String = corner_labels[i] if i < corner_labels.size() else str(i + 1)
+		parts.append("%s(%d,%d)" % [label, int(corners[i].x), int(corners[i].y)])
+	info_label.text = "%s  |  %s  |  %s  |  %d pts" % [s["label"], "  ".join(parts), mode_text, corners.size()]
